@@ -1,0 +1,1022 @@
+/* ==========================================================================
+   NixEasy CPQ - Configurator Styles
+   Replicated from React source: src/views/Configurator.module.scss (938 lines)
+   Converted from CSS Modules (.className) to regular CSS selectors (.cfg-*)
+   where needed to avoid collisions; most classes use descriptive names.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Catalog Item
+   -------------------------------------------------------------------------- */
+
+.catalog-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.catalog-item:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary);
+}
+
+.catalog-item-disabled {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+}
+
+.catalog-item-disabled:hover {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Price Tag
+   -------------------------------------------------------------------------- */
+
+.price-tag {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Measure Points Button
+   -------------------------------------------------------------------------- */
+
+.measure-points-btn {
+  background: var(--surface);
+  color: var(--text-main);
+  border-color: var(--border);
+}
+
+.measure-points-btn:hover {
+  background: var(--surface-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+/* --------------------------------------------------------------------------
+   Measure Point Item Highlight
+   -------------------------------------------------------------------------- */
+
+.measure-point-item {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.03) 0%, rgba(99, 102, 241, 0.03) 100%);
+}
+
+.measure-point-item:hover {
+  border-color: #8b5cf6;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%);
+}
+
+/* --------------------------------------------------------------------------
+   Measure Point Tag (in popover)
+   -------------------------------------------------------------------------- */
+
+.measure-point-tag {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* --------------------------------------------------------------------------
+   Container Panel
+   -------------------------------------------------------------------------- */
+
+.container-panel {
+  background: var(--surface);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  height: calc(100vh - 200px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.container-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+
+.container-add-form {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--primary-light);
+}
+
+.container-edit-form {
+  padding: 8px;
+  background: var(--bg);
+  border-radius: 6px;
+}
+
+.container-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.container-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.container-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.container-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   Container Item
+   -------------------------------------------------------------------------- */
+
+.container-item {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.container-item:hover {
+  border-color: var(--primary);
+  background: var(--surface-hover);
+}
+
+.container-item:hover .container-item-actions {
+  opacity: 1;
+}
+
+.container-item-selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+.container-item-selected .container-item-actions {
+  opacity: 1;
+}
+
+.container-item-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.container-item-count {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.container-item-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+/* --------------------------------------------------------------------------
+   Container Tabs
+   -------------------------------------------------------------------------- */
+
+.container-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.container-tab-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.container-tab-wrapper:hover .container-actions {
+  opacity: 1;
+}
+
+.container-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.container-tab:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary);
+  color: var(--text-main);
+}
+
+.container-tab-active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.container-tab-active:hover {
+  background: var(--primary-light);
+}
+
+.container-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--bg);
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.container-actions {
+  display: flex;
+  gap: 2px;
+  margin-left: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+/* --------------------------------------------------------------------------
+   Dark Mode: Container Tabs
+   -------------------------------------------------------------------------- */
+
+[data-theme="dark"] .container-tab {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .container-tab:hover {
+  background: var(--surface-hover);
+}
+
+[data-theme="dark"] .container-tab-active {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: var(--primary);
+}
+
+[data-theme="dark"] .container-count {
+  background: var(--bg);
+}
+
+/* --------------------------------------------------------------------------
+   Container Group
+   -------------------------------------------------------------------------- */
+
+.container-group {
+  border-bottom: 1px solid var(--border);
+}
+
+.container-group:last-child {
+  border-bottom: none;
+}
+
+.container-selected {
+  background: var(--primary-light);
+}
+
+/* Container Header within groups (clickable) */
+.container-group .container-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.container-group .container-header:hover {
+  background: var(--surface-hover);
+}
+
+.container-selected .container-header {
+  background: var(--primary-light);
+}
+
+.container-selected .container-header:hover {
+  background: var(--primary-light);
+}
+
+/* --------------------------------------------------------------------------
+   Container Indicator in Catalog
+   -------------------------------------------------------------------------- */
+
+.container-indicator {
+  margin-bottom: 8px;
+}
+
+.selected-container-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--primary-light);
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: var(--primary);
+}
+
+.selected-container-badge strong {
+  font-weight: 600;
+}
+
+.no-container-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: #92400e;
+}
+
+/* --------------------------------------------------------------------------
+   Dark Mode: Container Indicator
+   -------------------------------------------------------------------------- */
+
+[data-theme="dark"] .selected-container-badge {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+[data-theme="dark"] .no-container-warning {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fcd34d;
+}
+
+[data-theme="dark"] .container-selected {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+[data-theme="dark"] .container-selected .container-header {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+/* --------------------------------------------------------------------------
+   Hierarchy Visualization
+   -------------------------------------------------------------------------- */
+
+.hierarchy-row {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.hierarchy-row:hover {
+  background: var(--surface-hover) !important;
+}
+
+.hierarchy-row.selected-group {
+  background: rgba(79, 70, 229, 0.05);
+}
+
+.hierarchy-row.selected-group:hover {
+  background: rgba(79, 70, 229, 0.08) !important;
+}
+
+.hierarchy-indicator {
+  position: relative;
+  height: 100%;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+}
+
+.hierarchy-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  position: relative;
+  z-index: 2;
+  transition: box-shadow 0.15s ease;
+}
+
+.hierarchy-line {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+.hierarchy-vertical-line {
+  position: absolute;
+  top: 50%;
+  bottom: -30px;
+  width: 2px;
+}
+
+.type-tag {
+  font-size: 0.55rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.group-separator td {
+  padding: 12px 0 !important;
+}
+
+/* --------------------------------------------------------------------------
+   Hierarchy Staircase Visualization
+   -------------------------------------------------------------------------- */
+
+.hierarchy-staircase {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+}
+
+.hierarchy-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.hierarchy-step:hover {
+  background: var(--surface-hover);
+}
+
+.hierarchy-step-base {
+  margin-left: 0;
+  border-left: 3px solid #059669;
+}
+
+.hierarchy-step-module {
+  margin-left: 24px;
+  border-left: 3px solid #2563eb;
+}
+
+.hierarchy-step-addon {
+  margin-left: 48px;
+  border-left: 3px solid #7c3aed;
+}
+
+.hierarchy-step-service {
+  margin-left: 0;
+  border-left: 3px solid #d97706;
+}
+
+/* --------------------------------------------------------------------------
+   Installed Base Panel
+   -------------------------------------------------------------------------- */
+
+.installed-base-panel {
+  display: flex;
+  flex-direction: column;
+  height: 400px;
+  min-height: 350px;
+  max-height: 60vh;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+}
+
+.installed-base-loading,
+.installed-base-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  gap: 8px;
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+.installed-base-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.installed-base-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.stat-item strong {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.stat-expired {
+  color: #ef4444;
+}
+
+.stat-expired strong {
+  color: #ef4444;
+}
+
+.stat-divider {
+  color: var(--border);
+}
+
+.installed-base-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   Filter Tabs
+   -------------------------------------------------------------------------- */
+
+.filter-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface);
+  padding: 3px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.filter-tab {
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filter-tab:hover {
+  color: var(--text-main);
+  background: var(--surface-hover);
+  opacity: 0.8;
+}
+
+.filter-tab-active {
+  background: var(--primary) !important;
+  color: white !important;
+}
+
+.filter-tab-expired.filter-tab-active {
+  background: #ef4444 !important;
+}
+
+.filter-tab-active2.filter-tab-active {
+  background: #10b981 !important;
+}
+
+/* --------------------------------------------------------------------------
+   Search Box
+   -------------------------------------------------------------------------- */
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 8px;
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.search-input {
+  padding: 6px 10px 6px 28px !important;
+  font-size: 0.75rem !important;
+  width: 180px !important;
+  border-radius: 6px !important;
+}
+
+/* --------------------------------------------------------------------------
+   Installed Base Sites List
+   -------------------------------------------------------------------------- */
+
+.installed-base-sites {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 200px;
+}
+
+.installed-base-sites::-webkit-scrollbar {
+  width: 6px;
+}
+
+.installed-base-sites::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.no-results {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+/* --------------------------------------------------------------------------
+   Site Card
+   -------------------------------------------------------------------------- */
+
+.site-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.site-card:hover {
+  border-color: var(--primary);
+}
+
+.site-card-selected {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%);
+  box-shadow: 0 0 0 1px var(--primary-light);
+}
+
+.site-card-expired {
+  border-color: #fca5a5;
+  background: linear-gradient(to right, rgba(254, 202, 202, 0.1), transparent);
+}
+
+.site-card-expired:hover {
+  border-color: #ef4444;
+}
+
+/* --------------------------------------------------------------------------
+   Site Header
+   -------------------------------------------------------------------------- */
+
+.site-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.site-header:hover {
+  background: var(--surface-hover);
+}
+
+.site-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.expand-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.site-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.site-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.site-card-expired .site-icon {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.site-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-main);
+}
+
+.site-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Expiry Badges
+   -------------------------------------------------------------------------- */
+
+.expiry-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg);
+  font-weight: 500;
+}
+
+.expiry-badge-expired {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #fee2e2;
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.expired-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #ef4444;
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.expired-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   Site Items (expanded table area)
+   -------------------------------------------------------------------------- */
+
+.site-items {
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.site-items::-webkit-scrollbar {
+  width: 6px;
+}
+
+.site-items::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* --------------------------------------------------------------------------
+   Items Table (within site cards)
+   -------------------------------------------------------------------------- */
+
+.items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.items-table th {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+}
+
+.items-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.items-table tr:last-child td {
+  border-bottom: none;
+}
+
+.items-table tr:hover td {
+  background: var(--surface-hover);
+}
+
+/* --------------------------------------------------------------------------
+   Item Row States
+   -------------------------------------------------------------------------- */
+
+.item-row-expired td {
+  background: rgba(254, 202, 202, 0.15) !important;
+}
+
+.item-row-referenced {
+  background: rgba(99, 102, 241, 0.1) !important;
+}
+
+.item-row-referenced td {
+  background: rgba(99, 102, 241, 0.1) !important;
+}
+
+.item-row-referenced:hover td {
+  background: rgba(99, 102, 241, 0.15) !important;
+}
+
+/* --------------------------------------------------------------------------
+   License Info
+   -------------------------------------------------------------------------- */
+
+.license-name {
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+.license-sku {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  font-family: ui-monospace, monospace;
+}
+
+.qty-cell {
+  font-weight: 600;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   Status Badges (Expired / Expiring Soon / Active)
+   -------------------------------------------------------------------------- */
+
+.status-expired {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.status-expiring-soon {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #d97706;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.status-active {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #d1fae5;
+  color: #059669;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   Dark Mode: Installed Base
+   -------------------------------------------------------------------------- */
+
+[data-theme="dark"] .site-card-expired {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: linear-gradient(to right, rgba(127, 29, 29, 0.15), transparent);
+}
+
+[data-theme="dark"] .expiry-badge-expired {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .site-card-expired .site-icon {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .item-row-expired td {
+  background: rgba(127, 29, 29, 0.15) !important;
+}
+
+[data-theme="dark"] .status-expired {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .status-expiring-soon {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+}
+
+[data-theme="dark"] .status-active {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+}
+
+/* --------------------------------------------------------------------------
+   Installed Base Wrapper
+   -------------------------------------------------------------------------- */
+
+.installed-base-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 800px;
+  min-height: 750px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}

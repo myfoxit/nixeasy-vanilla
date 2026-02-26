@@ -1,0 +1,66 @@
+/* ==========================================================================
+   NixEasy CPQ - CSS Custom Properties (Theme Variables)
+   Replicated from React source: src/index.scss :root and [data-theme="dark"]
+   ========================================================================== */
+
+:root {
+  /* Primary brand colors */
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-light: #eef2ff;
+
+  /* Background and surface */
+  --bg: #f9fafb;
+  --surface: #ffffff;
+  --surface-hover: #f3f4f6;
+
+  /* Text */
+  --text-main: #111827;
+  --text-secondary: #6b7280;
+
+  /* Border */
+  --border: #e5e7eb;
+
+  /* Semantic colors */
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --success: #10b981;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 68px;
+}
+
+[data-theme="dark"] {
+  /* Primary brand colors - lighter for dark backgrounds */
+  --primary: #818cf8;
+  --primary-hover: #a5b4fc;
+  --primary-light: rgba(99, 102, 241, 0.15);
+
+  /* Background and surface */
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-hover: #334155;
+
+  /* Text */
+  --text-main: #f1f5f9;
+  --text-secondary: #94a3b8;
+
+  /* Border */
+  --border: #334155;
+
+  /* Semantic colors */
+  --danger: #f87171;
+  --danger-hover: #fca5a5;
+  --success: #34d399;
+
+  /* Shadows - stronger for dark mode */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.5), 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
+}

@@ -1,0 +1,494 @@
+/* ==========================================================================
+   NixEasy CPQ - View-Specific Styles
+   Additional styles for Dashboard, Login, DataTable, Toast, and other views
+   that use inline <style> blocks or need minor CSS class overrides.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Grid Utilities (additional columns beyond base.css)
+   -------------------------------------------------------------------------- */
+
+.grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.grid-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* --------------------------------------------------------------------------
+   Spacing Overrides
+   -------------------------------------------------------------------------- */
+
+.mb-0 {
+  margin-bottom: 0;
+}
+
+.mb-1 {
+  margin-bottom: 0.25rem;
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
+/* --------------------------------------------------------------------------
+   Display Utilities
+   -------------------------------------------------------------------------- */
+
+.block {
+  display: block;
+}
+
+.inline-flex {
+  display: inline-flex;
+}
+
+.overflow-visible {
+  overflow: visible;
+}
+
+/* --------------------------------------------------------------------------
+   Dashboard: Hover Row
+   -------------------------------------------------------------------------- */
+
+.hover-row:hover {
+  background: var(--bg);
+}
+
+/* --------------------------------------------------------------------------
+   Main Header (shared across views)
+   -------------------------------------------------------------------------- */
+
+.main-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 1.5rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* --------------------------------------------------------------------------
+   Login View
+   -------------------------------------------------------------------------- */
+
+.login-container {
+  max-width: 24rem;
+  margin: 10vh auto;
+}
+
+/* --------------------------------------------------------------------------
+   Toast Notifications
+   -------------------------------------------------------------------------- */
+
+.toast-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border);
+  animation: toastSlideIn 0.3s ease;
+  min-width: 300px;
+  max-width: 400px;
+}
+
+.toast-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.toast-icon-success {
+  color: #10b981;
+}
+
+.toast-icon-error {
+  color: #ef4444;
+}
+
+.toast-icon-info {
+  color: #3b82f6;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 0.875rem;
+  color: #1f2937;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.toast-close:hover {
+  color: var(--text-main);
+}
+
+[data-theme="dark"] .toast {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .toast-message {
+  color: var(--text-main);
+}
+
+@keyframes toastSlideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   DataTable Component
+   -------------------------------------------------------------------------- */
+
+.data-table-wrapper {
+  overflow-x: auto;
+}
+
+.data-table-wrapper table {
+  width: 100%;
+}
+
+.data-table-wrapper tr {
+  cursor: pointer;
+}
+
+.data-table-wrapper tr:hover td {
+  background-color: var(--surface-hover);
+}
+
+/* --------------------------------------------------------------------------
+   Pagination
+   -------------------------------------------------------------------------- */
+
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+/* --------------------------------------------------------------------------
+   Popover Component
+   -------------------------------------------------------------------------- */
+
+.popover {
+  position: absolute;
+  z-index: 50;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-lg);
+  min-width: 200px;
+  animation: fadeIn 0.15s ease;
+}
+
+.popover-content {
+  padding: 0.75rem;
+}
+
+/* --------------------------------------------------------------------------
+   Confirm Modal
+   -------------------------------------------------------------------------- */
+
+.confirm-modal-card {
+  width: 100%;
+  max-width: 400px;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+/* --------------------------------------------------------------------------
+   Wizard Modal (Installed Base Import)
+   -------------------------------------------------------------------------- */
+
+.wizard-modal {
+  width: 600px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow: visible;
+}
+
+.wizard-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.wizard-body {
+  padding: 1.5rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.wizard-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* --------------------------------------------------------------------------
+   Search / Filter Bar (used in list views)
+   -------------------------------------------------------------------------- */
+
+.search-filter-bar {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.search-filter-bar input[type="search"],
+.search-filter-bar input[type="text"] {
+  max-width: 250px;
+}
+
+/* --------------------------------------------------------------------------
+   Stat Cards (Dashboard)
+   -------------------------------------------------------------------------- */
+
+.stat-card {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.stat-card-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.stat-card-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Progress Bar (Dashboard)
+   -------------------------------------------------------------------------- */
+
+.progress-bar-track {
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* --------------------------------------------------------------------------
+   Context Banner (Configurator)
+   -------------------------------------------------------------------------- */
+
+.context-banner {
+  padding: 0.75rem 2rem;
+  background: var(--primary-light);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.context-banner-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Dependency Warning (Configurator)
+   -------------------------------------------------------------------------- */
+
+.dependency-warning {
+  padding: 0.5rem 0.75rem;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  color: #92400e;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+[data-theme="dark"] .dependency-warning {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fcd34d;
+}
+
+/* --------------------------------------------------------------------------
+   Summary Card (Configurator)
+   -------------------------------------------------------------------------- */
+
+.summary-card {
+  background: var(--surface);
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.summary-card-header {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.summary-card-body {
+  padding: 1rem;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+}
+
+.summary-row-total {
+  border-top: 2px solid var(--border);
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   Empty State
+   -------------------------------------------------------------------------- */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.empty-state-icon {
+  width: 48px;
+  height: 48px;
+  color: var(--border);
+  margin-bottom: 1rem;
+}
+
+.empty-state-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 0.5rem;
+}
+
+.empty-state-text {
+  font-size: 0.875rem;
+  max-width: 300px;
+}
+
+/* --------------------------------------------------------------------------
+   Loading State
+   -------------------------------------------------------------------------- */
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  gap: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive Overrides
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 768px) {
+  .grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid-cols-12 {
+    grid-template-columns: 1fr;
+  }
+
+  .col-span-4,
+  .col-span-8 {
+    grid-column: span 1;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .main-header {
+    padding: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .container {
+    padding: 1rem;
+  }
+}
