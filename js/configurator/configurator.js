@@ -1355,7 +1355,12 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   // INIT
   // ======================================================
   renderFull();
-  loadInitialData();
+  loadInitialData().then(() => {
+    // Auto-create a default container if none exist (new quote)
+    if (containers.length === 0) {
+      addContainer('Default', '');
+    }
+  });
 
   // ======================================================
   // CLEANUP
