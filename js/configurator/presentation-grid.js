@@ -151,21 +151,45 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
   // --- Section subtotals ---
 
   function getSections(visibleItems) {
+    // Build sections using explicit groupId on each item.
+    // Items with groupId belong to that header; items without are ungrouped.
+    const headerMap = new Map(); // headerId → { header, items[] }
+    const headers = visibleItems.filter(i => i.type === 'header');
+    headers.forEach(h => headerMap.set(h.id, { header: h, items: [] }));
+
+    const ungroupedBefore = []; // items before any header or without groupId
     const sections = [];
-    let currentSection = { header: null, items: [] };
+
+    // Assign items to their groups
     visibleItems.forEach(item => {
-      if (item.type === 'header') {
-        if (currentSection.items.length > 0 || currentSection.header) {
-          sections.push(currentSection);
-        }
-        currentSection = { header: item, items: [] };
+      if (item.type === 'header') return;
+      if (item.groupId && headerMap.has(item.groupId)) {
+        headerMap.get(item.groupId).items.push(item);
       } else {
-        currentSection.items.push(item);
+        ungroupedBefore.push(item);
       }
     });
-    if (currentSection.items.length > 0 || currentSection.header) {
-      sections.push(currentSection);
+
+    // Build sections in display order: walk visible items, emit ungrouped runs
+    // and group sections at the header's position
+    let ungroupedRun = [];
+    visibleItems.forEach(item => {
+      if (item.type === 'header') {
+        // flush any ungrouped run before this header
+        if (ungroupedRun.length > 0) {
+          sections.push({ header: null, items: ungroupedRun });
+          ungroupedRun = [];
+        }
+        sections.push(headerMap.get(item.id));
+      } else if (!item.groupId || !headerMap.has(item.groupId)) {
+        ungroupedRun.push(item);
+      }
+      // grouped items are already in their header's section
+    });
+    if (ungroupedRun.length > 0) {
+      sections.push({ header: null, items: ungroupedRun });
     }
+
     return sections;
   }
 
@@ -372,6 +396,13 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
 
   function deleteItemWithUndo(pItem) {
     pItem.hidden = true;
+    // If deleting a header, ungroup its children (save refs for undo)
+    let ungroupedIds = [];
+    if (pItem.type === 'header') {
+      state.items.forEach(i => {
+        if (i.groupId === pItem.id) { ungroupedIds.push(i.id); delete i.groupId; }
+      });
+    }
     emitChange();
     render();
     showToast('Row deleted. <button onclick="this.closest(\'.toast\')?.dispatchEvent(new CustomEvent(\'undo\'))" style="background:none;border:none;color:var(--primary);text-decoration:underline;cursor:pointer;font-size:inherit;">Undo</button>', 'info');
@@ -382,6 +413,10 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     if (latestToast) {
       latestToast.addEventListener('undo', () => {
         pItem.hidden = false;
+        // Re-group children if header was restored
+        if (pItem.type === 'header' && ungroupedIds.length) {
+          state.items.forEach(i => { if (ungroupedIds.includes(i.id)) i.groupId = pItem.id; });
+        }
         emitChange();
         render();
       }, { once: true });
@@ -533,6 +568,27 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     const insertIdx = dropGapIndex > dragIdx ? dropGapIndex - 1 : dropGapIndex;
     reordered.splice(insertIdx, 0, dragItem);
     reordered.forEach((item, i) => { item.order = i; });
+
+    // Update groupId based on new position: find the nearest header above
+    if (dragItem.type !== 'header') {
+      let newGroupId = null;
+      for (let i = insertIdx - 1; i >= 0; i--) {
+        if (reordered[i].type === 'header') {
+          // Only assign if the item right before us belongs to this group (or IS the header)
+          // Check: is there an unbroken chain of grouped items from the header to here?
+          let allGrouped = true;
+          for (let j = i + 1; j < insertIdx; j++) {
+            if (reordered[j].type !== 'header' && reordered[j].groupId !== reordered[i].id) {
+              allGrouped = false;
+              break;
+            }
+          }
+          if (allGrouped) newGroupId = reordered[i].id;
+          break;
+        }
+      }
+      dragItem.groupId = newGroupId;
+    }
 
     dragItem = null;
     dropGapIndex = null;
@@ -1457,12 +1513,13 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     };
     state.items.push(header);
 
-    // Place selected items contiguously after the header
+    // Assign selected items to this group and place contiguously after the header
     selItems.forEach((item, idx) => {
+      item.groupId = header.id;
       item.order = firstOrder + idx * 0.1;
     });
 
-    // Push trapped non-selected items after the last selected item
+    // Push trapped non-selected items after the last selected item (they stay ungrouped)
     trapped.forEach((item, idx) => {
       item.order = lastOrder + 1 + idx * 0.1;
     });
