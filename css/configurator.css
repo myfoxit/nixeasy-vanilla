@@ -1020,3 +1020,284 @@
   border-radius: 0.75rem;
   background: var(--surface);
 }
+
+/* ==========================================================================
+   Presentation Editor
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Full-screen overlay
+   -------------------------------------------------------------------------- */
+
+.presentation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Toolbar
+   -------------------------------------------------------------------------- */
+
+.presentation-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   Grid Container
+   -------------------------------------------------------------------------- */
+
+.presentation-grid-container {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.presentation-grid-wrapper {
+  width: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   Presentation Grid Table
+   -------------------------------------------------------------------------- */
+
+.presentation-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  table-layout: fixed;
+  outline: none;
+}
+
+.presentation-grid th {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  background: var(--bg);
+  border-bottom: 2px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  white-space: nowrap;
+}
+
+.presentation-grid td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.presentation-grid tr:last-child td {
+  border-bottom: none;
+}
+
+/* --------------------------------------------------------------------------
+   Contenteditable cells
+   -------------------------------------------------------------------------- */
+
+.presentation-grid td[contenteditable] {
+  cursor: text;
+  border-radius: 2px;
+  transition: background 0.1s, box-shadow 0.1s;
+  outline: none;
+  min-height: 1.5em;
+}
+
+.presentation-grid td[contenteditable]:hover {
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.presentation-grid td[contenteditable]:focus,
+.presentation-grid td[contenteditable].editing {
+  background: rgba(99, 102, 241, 0.08);
+  box-shadow: inset 0 0 0 2px var(--primary);
+  white-space: normal;
+  overflow: visible;
+}
+
+/* --------------------------------------------------------------------------
+   Row types
+   -------------------------------------------------------------------------- */
+
+/* Header (section) row */
+.presentation-grid .header-row {
+  background: var(--bg);
+}
+
+.presentation-grid .header-row td {
+  border-bottom: 2px solid var(--border);
+}
+
+.presentation-grid .pg-cell-header-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-main);
+  letter-spacing: 0.01em;
+  padding: 10px 12px;
+}
+
+/* Item row */
+.presentation-grid .item-row:hover td {
+  background: var(--surface-hover);
+}
+
+/* Selected row */
+.presentation-grid .selected-row {
+  background: rgba(99, 102, 241, 0.06) !important;
+}
+
+.presentation-grid .selected-row td {
+  background: rgba(99, 102, 241, 0.06) !important;
+}
+
+/* Hidden (soft-deleted) row */
+.presentation-grid .hidden-row td {
+  text-decoration: line-through;
+  opacity: 0.4;
+  background: var(--bg);
+}
+
+/* Changed source indicator */
+.presentation-grid .changed-row {
+  border-left: 3px solid #f59e0b;
+}
+
+.changed-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* Subtotal row */
+.presentation-grid .subtotal-row {
+  background: rgba(99, 102, 241, 0.03);
+}
+
+.presentation-grid .subtotal-row td {
+  border-bottom: 2px solid var(--border);
+  font-size: 0.78rem;
+}
+
+/* Grand total row */
+.presentation-grid .grand-total-row {
+  background: var(--bg);
+}
+
+.presentation-grid .grand-total-row td {
+  border-top: 2px solid var(--text-main);
+  border-bottom: none;
+  padding: 10px;
+  font-size: 0.9rem;
+}
+
+/* --------------------------------------------------------------------------
+   Cell types
+   -------------------------------------------------------------------------- */
+
+.pg-cell-check {
+  text-align: center;
+  width: 40px;
+}
+
+.pg-cell-check input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.pg-cell-sku {
+  color: var(--text-secondary);
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+}
+
+.pg-cell-total,
+.pg-cell-monthly {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pg-cell-actions {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pg-move-btn {
+  padding: 2px 4px !important;
+  font-size: 0.65rem !important;
+  line-height: 1;
+  color: var(--text-secondary);
+}
+
+.pg-move-btn:hover {
+  color: var(--primary);
+}
+
+/* Danger outline button for toolbar */
+.btn-danger-outline {
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  background: transparent;
+}
+
+.btn-danger-outline:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+/* --------------------------------------------------------------------------
+   Dark Mode: Presentation Editor
+   -------------------------------------------------------------------------- */
+
+[data-theme="dark"] .presentation-overlay {
+  background: var(--surface);
+}
+
+[data-theme="dark"] .presentation-grid td[contenteditable]:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+[data-theme="dark"] .presentation-grid td[contenteditable]:focus,
+[data-theme="dark"] .presentation-grid td[contenteditable].editing {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+[data-theme="dark"] .presentation-grid .selected-row td {
+  background: rgba(99, 102, 241, 0.12) !important;
+}
+
+[data-theme="dark"] .presentation-grid .hidden-row td {
+  background: rgba(30, 30, 40, 0.5);
+}
+
+[data-theme="dark"] .btn-danger-outline {
+  border-color: #f87171;
+  color: #f87171;
+}
+
+[data-theme="dark"] .btn-danger-outline:hover {
+  background: rgba(239, 68, 68, 0.15);
+}

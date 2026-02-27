@@ -17,6 +17,7 @@ import { createQuoteLinesTable } from './quote-lines.js';
 import { createSummaryCard } from './summary-card.js';
 import { createContextBanner } from './context-banner.js';
 import { createInstalledBasePanel } from './installed-base-panel.js';
+import { createPresentationEditor } from './presentation-editor.js';
 import {
   MEASURE_POINT_LICENSE_CONFIGS,
   calculateLicenseDistribution
@@ -64,6 +65,8 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   let installedBaseLoading = false;
   let referencedInstalledBase = [];
   let showInstalledBase = false;
+  let presentationItems = null;   // Saved presentation layer (null = never edited)
+  let presentationVersion = 0;    // Incremented on presentation save
 
   // Sub-component instances (populated in render)
   let catalogPanelInstance = null;
@@ -71,6 +74,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   let summaryCardInstance = null;
   let contextBannerInstance = null;
   let installedBasePanelInstance = null;
+  let presentationEditorInstance = null;
 
   // Popover instances for cleanup
   let exportPopoverInstance = null;
@@ -322,7 +326,9 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     if (!oppId) return;
     const configToSave = {
       ...config,
-      containers: serializeContainers()
+      containers: serializeContainers(),
+      presentationItems: presentationItems || null,
+      presentationVersion
     };
     const body = { opportunity: oppId, quote_data: configToSave };
     if (!isSuperUser() && currentUser?.id) body.created_by = currentUser.id;
@@ -342,7 +348,9 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     }
     const configToSave = {
       ...config,
-      containers: serializeContainers()
+      containers: serializeContainers(),
+      presentationItems: presentationItems || null,
+      presentationVersion
     };
     const res = await pb.collection('quote_templates').create({
       name,
@@ -372,6 +380,15 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       containers = loadedContainers;
       selectedContainerId = loadedContainers.length > 0 ? loadedContainers[0].id : null;
 
+      // Restore presentation state from template
+      if (template.template_data.presentationItems) {
+        presentationItems = template.template_data.presentationItems;
+        presentationVersion = template.template_data.presentationVersion || 0;
+      } else {
+        presentationItems = null;
+        presentationVersion = 0;
+      }
+
       recalcSummary();
       updateSubComponents();
     }
@@ -384,7 +401,9 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     }
     const configToSave = {
       ...config,
-      containers: serializeContainers()
+      containers: serializeContainers(),
+      presentationItems: presentationItems || null,
+      presentationVersion
     };
     const body = { name: templateName, description: templateDesc, template_data: configToSave };
     if (editingTemplateId && editingTemplateId !== 'new') {
@@ -420,6 +439,37 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   }
 
   // ======================================================
+  // PRESENTATION EDITOR
+  // ======================================================
+  function openPresentationEditor() {
+    if (config.lineItems.length === 0) {
+      showToast('Add items to the quote before exporting', 'warning');
+      return;
+    }
+
+    presentationEditorInstance = createPresentationEditor({
+      config,
+      licenses,
+      presentationItems,
+      presentationVersion,
+      isTemplateMode,
+      templateName,
+      quoteId: qId,
+      onClose: (items) => {
+        presentationItems = items;
+        presentationVersion++;
+        presentationEditorInstance = null;
+      },
+      onExport: (format, items) => {
+        presentationItems = items;
+        presentationVersion++;
+      }
+    });
+
+    document.body.appendChild(presentationEditorInstance.element);
+  }
+
+  // ======================================================
   // SUB-COMPONENT UPDATE (called after every state change)
   // ======================================================
   function updateSubComponents() {
@@ -439,16 +489,10 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       quoteLinesInstance.update({
         lineItems: config.lineItems,
         licenses,
-        containers,
-        selectedContainerId,
         isTemplateMode,
         onUpdateItem: updateItem,
         onRemoveItem: removeItem,
         onAddDependency: handleAddDependency,
-        onSelectContainer: selectContainer,
-        onUpdateContainer: updateContainer,
-        onRemoveContainer: removeContainer,
-        onAddContainer: addContainer,
         referencedInstalledBase,
         onRemoveInstalledBaseReference: toggleInstalledBaseReference
       });
@@ -547,9 +591,9 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     });
     headerRight.appendChild(backBtn);
 
-    // --- Export Popover ---
-    const exportTrigger = document.createElement('button');
-    exportTrigger.className = 'btn btn-secondary';
+    // --- Export Button (opens Presentation Editor) ---
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'btn btn-secondary';
     const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     exportSvg.setAttribute('fill', 'none');
     exportSvg.setAttribute('viewBox', '0 0 24 24');
@@ -561,11 +605,31 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     exportPath.setAttribute('stroke-linejoin', 'round');
     exportPath.setAttribute('d', 'M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3');
     exportSvg.appendChild(exportPath);
-    exportTrigger.appendChild(exportSvg);
-    exportTrigger.appendChild(document.createTextNode('Export'));
+    exportBtn.appendChild(exportSvg);
+    exportBtn.appendChild(document.createTextNode('Export'));
+    exportBtn.addEventListener('click', () => openPresentationEditor());
+    headerRight.appendChild(exportBtn);
+
+    // --- Quick Export Popover (direct export without presentation editor) ---
+    const quickExportTrigger = document.createElement('button');
+    quickExportTrigger.className = 'btn btn-secondary';
+    quickExportTrigger.style.cssText = 'padding:6px 8px;font-size:0.75rem;';
+    quickExportTrigger.title = 'Quick Export (skip editor)';
+    const qeSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    qeSvg.setAttribute('fill', 'none');
+    qeSvg.setAttribute('viewBox', '0 0 24 24');
+    qeSvg.setAttribute('stroke-width', '1.5');
+    qeSvg.setAttribute('stroke', 'currentColor');
+    qeSvg.style.cssText = 'width:14px;height:14px;';
+    const qePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    qePath.setAttribute('stroke-linecap', 'round');
+    qePath.setAttribute('stroke-linejoin', 'round');
+    qePath.setAttribute('d', 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z');
+    qeSvg.appendChild(qePath);
+    quickExportTrigger.appendChild(qeSvg);
 
     exportPopoverInstance = createPopover({
-      trigger: exportTrigger,
+      trigger: quickExportTrigger,
       content: () => buildExportContent(),
       align: 'right',
       width: 260
@@ -756,20 +820,14 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     const rightCol = document.createElement('div');
     rightCol.className = 'col-span-8 flex flex-col gap-6';
 
-    // Quote Lines Table
+    // Quote Lines Table (flat list)
     quoteLinesInstance = createQuoteLinesTable({
       lineItems: config.lineItems,
       licenses,
-      containers,
-      selectedContainerId,
       isTemplateMode,
       onUpdateItem: updateItem,
       onRemoveItem: removeItem,
       onAddDependency: handleAddDependency,
-      onSelectContainer: selectContainer,
-      onUpdateContainer: updateContainer,
-      onRemoveContainer: removeContainer,
-      onAddContainer: addContainer,
       referencedInstalledBase,
       onRemoveInstalledBaseReference: toggleInstalledBaseReference
     });
@@ -1088,6 +1146,11 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
           if (loadedContainers.length > 0) {
             selectedContainerId = loadedContainers[0].id;
           }
+          // Restore presentation state
+          if (data.presentationItems) {
+            presentationItems = data.presentationItems;
+            presentationVersion = data.presentationVersion || 0;
+          }
           recalcSummary();
           updateSubComponents();
         }
@@ -1116,6 +1179,11 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
           containers = loadedContainers;
           if (loadedContainers.length > 0) {
             selectedContainerId = loadedContainers[0].id;
+          }
+          // Restore presentation state
+          if (data.presentationItems) {
+            presentationItems = data.presentationItems;
+            presentationVersion = data.presentationVersion || 0;
           }
           recalcSummary();
         }
@@ -1199,6 +1267,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     if (exportPopoverInstance) exportPopoverInstance.destroy();
     if (loadPopoverInstance) loadPopoverInstance.destroy();
     if (savePopoverInstance) savePopoverInstance.destroy();
+    if (presentationEditorInstance) presentationEditorInstance.destroy();
     container.innerHTML = '';
   }
 
