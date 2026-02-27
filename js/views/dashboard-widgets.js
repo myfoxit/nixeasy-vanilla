@@ -328,12 +328,14 @@ async function renderCard(widget, body, globalTimeRange) {
 async function renderLineChart(widget, body, globalTimeRange) {
   showLoading(body);
   try {
+    destroyChart(widget.id);
     const records = await prepareData(widget, globalTimeRange);
-    const groups = groupRecords(records, widget.config.groupBy || 'month');
+    const groupBy = widget.config.groupBy && widget.config.groupBy !== 'none' ? widget.config.groupBy : 'month';
+    const groups = groupRecords(records, groupBy);
     const sortedKeys = Object.keys(groups).sort();
     const values = sortedKeys.map(k => calculateMetric(groups[k], widget.config.metric));
 
-    const isTimeGrouped = ['month', 'quarter', 'year'].includes(widget.config.groupBy);
+    const isTimeGrouped = ['month', 'quarter', 'year'].includes(groupBy);
     const labels = sortedKeys.map(k => isTimeGrouped ? monthLabel(k) : k);
 
     if (labels.length === 0) { showEmpty(body, 'No data for this time range'); return; }
@@ -345,7 +347,6 @@ async function renderLineChart(widget, body, globalTimeRange) {
     const colors = COLOR_SCHEMES[widget.config.colorScheme] || COLOR_SCHEMES.default;
     const theme = chartTheme();
 
-    destroyChart(widget.id);
     const chart = new Chart(canvas, {
       type: 'line',
       data: {
@@ -406,8 +407,10 @@ async function renderLineChart(widget, body, globalTimeRange) {
 async function renderBarChart(widget, body, globalTimeRange) {
   showLoading(body);
   try {
+    destroyChart(widget.id);
     const records = await prepareData(widget, globalTimeRange);
-    const groups = groupRecords(records, widget.config.groupBy || 'status');
+    const groupBy = widget.config.groupBy && widget.config.groupBy !== 'none' ? widget.config.groupBy : 'status';
+    const groups = groupRecords(records, groupBy);
 
     let entries = Object.entries(groups).map(([key, recs]) => ({
       label: key,
@@ -512,8 +515,10 @@ async function renderBarChart(widget, body, globalTimeRange) {
 async function renderPieDonut(widget, body, globalTimeRange) {
   showLoading(body);
   try {
+    destroyChart(widget.id);
     const records = await prepareData(widget, globalTimeRange);
-    const groups = groupRecords(records, widget.config.groupBy || 'status');
+    const groupBy = widget.config.groupBy && widget.config.groupBy !== 'none' ? widget.config.groupBy : 'status';
+    const groups = groupRecords(records, groupBy);
 
     const entries = Object.entries(groups)
       .map(([key, recs]) => ({ label: key, value: calculateMetric(recs, widget.config.metric) }))
