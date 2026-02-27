@@ -253,7 +253,10 @@ function open() {
   function doSearch() {
     if (!overlay) return;
     selectedIndex = 0;
-    renderResults(resultsEl, searchAll(input.value));
+    const query = input.value;
+    const groups = searchAll(query);
+    console.log('[CmdPalette] doSearch query="' + query + '" groups=' + groups.length, 'items=' + groups.reduce((s, g) => s + g.items.length, 0), 'cache.ts=' + cache.ts);
+    renderResults(resultsEl, groups);
   }
 
   doSearch();
@@ -316,6 +319,7 @@ function close() {
 }
 
 function renderResults(container, groups) {
+  console.log('[CmdPalette] renderResults called, groups:', groups.length, 'container:', container?.className);
   container.innerHTML = '';
   flatItems = [];
 
