@@ -251,35 +251,28 @@ export function createDashboardView(container) {
     if (monthKeys.length > 0) {
       const canvas = el('canvas');
       revenueBox.body.appendChild(canvas);
+      // Use bar chart when few data points, line when ≥3
+      const useBar = monthKeys.length < 3;
       const c = new Chart(canvas, {
-        type: 'line',
+        type: useBar ? 'bar' : 'line',
         data: {
           labels: monthKeys.map(k => monthLabel(k)),
           datasets: [
             {
               label: 'CAPEX',
               data: monthKeys.map(k => monthGroups[k].capex),
-              borderColor: COLORS.indigo700,
-              backgroundColor: COLORS.indigo700 + '18',
-              fill: true,
-              tension: 0.35,
-              pointRadius: 3,
-              pointHoverRadius: 6,
-              pointBackgroundColor: COLORS.indigo700,
-              borderWidth: 2.5,
+              ...(useBar
+                ? { backgroundColor: COLORS.indigo600, borderRadius: 6, maxBarThickness: 40 }
+                : { borderColor: COLORS.indigo700, backgroundColor: COLORS.indigo700 + '18', fill: true, tension: 0.35, pointRadius: 3, pointHoverRadius: 6, pointBackgroundColor: COLORS.indigo700, borderWidth: 2.5 }
+              ),
             },
             {
               label: 'OPEX (monthly)',
               data: monthKeys.map(k => monthGroups[k].opex),
-              borderColor: COLORS.indigo400,
-              backgroundColor: COLORS.indigo400 + '18',
-              fill: true,
-              tension: 0.35,
-              pointRadius: 3,
-              pointHoverRadius: 6,
-              pointBackgroundColor: COLORS.indigo400,
-              borderWidth: 2,
-              borderDash: [5, 3],
+              ...(useBar
+                ? { backgroundColor: COLORS.indigo300, borderRadius: 6, maxBarThickness: 40 }
+                : { borderColor: COLORS.indigo400, backgroundColor: COLORS.indigo400 + '18', fill: true, tension: 0.35, pointRadius: 3, pointHoverRadius: 6, pointBackgroundColor: COLORS.indigo400, borderWidth: 2, borderDash: [5, 3] }
+              ),
             },
           ],
         },
@@ -287,7 +280,7 @@ export function createDashboardView(container) {
           ...chartDefaults(),
           plugins: {
             ...chartDefaults().plugins,
-            legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 8, boxHeight: 8, usePointStyle: true, font: { size: 11 } } },
+            legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 8, boxHeight: 8, usePointStyle: !useBar, font: { size: 11 } } },
           },
           scales: {
             x: { grid: { display: false }, ticks: { font: { size: 10 } }, border: { display: false } },
@@ -411,43 +404,43 @@ export function createDashboardView(container) {
     // ─── Row 3: CAPEX/OPEX by Module + Expiring Contracts ────
     const row3 = el('div', 'dash-row');
 
-    // Quote Value Distribution (CAPEX distribution across quotes)
-    const moduleBox = chartCard('Quote Value Distribution', 'span-5');
-    const quoteValues = quotes.map(q => {
-      const qd = typeof q.quote_data === 'string' ? JSON.parse(q.quote_data) : q.quote_data;
-      return {
-        capex: qd?.summary?.hk || 0,
-        opex: qd?.summary?.monthly || 0,
-        name: q.id,
-      };
-    }).filter(q => q.capex > 0 || q.opex > 0);
-
-    if (quoteValues.length > 0) {
+    // CAPEX vs OPEX Breakdown (grouped bar per opportunity status)
+    const moduleBox = chartCard('CAPEX vs OPEX by Status', 'span-5');
+    const capexByStatus = {};
+    const opexByStatus = {};
+    opps.forEach(o => {
+      const s = o.status || 'Unknown';
+      capexByStatus[s] = (capexByStatus[s] || 0) + (Number(o.capex) || 0);
+      opexByStatus[s] = (opexByStatus[s] || 0) + (Number(o.opex_monthly) || 0);
+    });
+    const coKeys = statusOrder.filter(s => capexByStatus[s] || opexByStatus[s]);
+    if (coKeys.length > 0) {
       const canvas = el('canvas');
       moduleBox.body.appendChild(canvas);
-      // Show as scatter: CAPEX vs OPEX
       const c = new Chart(canvas, {
-        type: 'scatter',
+        type: 'bar',
         data: {
-          datasets: [{
-            label: 'Quotes',
-            data: quoteValues.map(q => ({ x: q.capex, y: q.opex })),
-            backgroundColor: COLORS.indigo500 + '50',
-            borderColor: COLORS.indigo600,
-            borderWidth: 1.5,
-            pointRadius: 6,
-            pointHoverRadius: 8,
-          }],
+          labels: coKeys,
+          datasets: [
+            { label: 'CAPEX', data: coKeys.map(s => capexByStatus[s] || 0), backgroundColor: COLORS.indigo600, borderRadius: 4, maxBarThickness: 24 },
+            { label: 'OPEX/mo', data: coKeys.map(s => opexByStatus[s] || 0), backgroundColor: COLORS.indigo300, borderRadius: 4, maxBarThickness: 24 },
+          ],
         },
         options: {
           ...chartDefaults(),
+          plugins: {
+            ...chartDefaults().plugins,
+            legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 8, boxHeight: 8, font: { size: 11 } } },
+          },
           scales: {
-            x: { title: { display: true, text: 'CAPEX (€)', font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { callback: v => shortCurrency(v), font: { size: 10 } }, border: { display: false } },
-            y: { title: { display: true, text: 'Monthly (€)', font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { callback: v => shortCurrency(v), font: { size: 10 } }, border: { display: false }, beginAtZero: true },
+            x: { grid: { display: false }, ticks: { font: { size: 10 } }, border: { display: false } },
+            y: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { callback: v => shortCurrency(v), font: { size: 10 } }, border: { display: false }, beginAtZero: true },
           },
         },
       });
       charts.push(c);
+    } else {
+      moduleBox.body.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:40px;">No data</p>';
     }
     row3.appendChild(moduleBox.el);
 

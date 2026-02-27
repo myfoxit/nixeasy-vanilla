@@ -457,7 +457,7 @@
    -------------------------------------------------------------------------- */
 
 /* Dashboard */
-.dash-page { padding: 0; }
+.dash-page { padding: 0 24px; }
 .dash-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
 .dash-title { font-size:1.5rem; font-weight:700; color:var(--text-primary); margin:0; }
 .dash-subtitle { font-size:0.82rem; color:var(--text-secondary); margin-top:2px; }
