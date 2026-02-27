@@ -1029,15 +1029,22 @@
    Full-screen overlay
    -------------------------------------------------------------------------- */
 
+/* ==========================================================================
+   PRESENTATION EDITOR — Premium Redesign
+   ========================================================================== */
+
 .presentation-overlay {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: var(--surface);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  animation: pe-fadeIn 0.2s ease-out;
 }
+
+@keyframes pe-fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* --------------------------------------------------------------------------
    Toolbar
@@ -1050,11 +1057,129 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 20px;
-  background: var(--bg);
+  padding: 12px 24px;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.pe-toolbar-left {
+  display: flex;
+  align-items: center;
   gap: 12px;
+}
+
+.pe-toolbar-left h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.pe-toolbar-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.pe-toolbar-warning {
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pe-toolbar-center {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pe-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Pill-style toolbar buttons (icon + text) */
+.pe-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.pe-pill-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--text-secondary);
+}
+
+.pe-pill-btn svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.pe-pill-btn.pe-pill-danger {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.pe-pill-btn.pe-pill-danger:hover {
+  background: rgba(239, 68, 68, 0.06);
+  border-color: #ef4444;
+}
+
+.pe-pill-btn.pe-pill-primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.pe-pill-btn.pe-pill-primary:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.pe-pill-btn.pe-pill-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.pe-pill-btn.pe-pill-ghost:hover {
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+/* Keyboard shortcut badges */
+.pe-kbd {
+  display: inline-block;
+  font-size: 0.6rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(0,0,0,0.06);
+  color: var(--text-secondary);
+  font-family: ui-monospace, monospace;
+  margin-left: 4px;
+  line-height: 1.4;
+  vertical-align: middle;
 }
 
 /* --------------------------------------------------------------------------
@@ -1064,11 +1189,49 @@
 .presentation-grid-container {
   flex: 1;
   overflow: auto;
-  padding: 16px;
+  padding: 0 24px 24px;
+  position: relative;
 }
 
 .presentation-grid-wrapper {
   width: 100%;
+  position: relative;
+}
+
+/* --------------------------------------------------------------------------
+   Empty State
+   -------------------------------------------------------------------------- */
+
+.pe-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+  animation: pe-fadeIn 0.3s ease-out;
+}
+
+.pe-empty-state svg {
+  width: 80px;
+  height: 80px;
+  color: var(--border);
+  margin-bottom: 20px;
+}
+
+.pe-empty-state h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 0 0 8px;
+}
+
+.pe-empty-state p {
+  font-size: 0.85rem;
+  margin: 0;
+  max-width: 320px;
+  line-height: 1.5;
 }
 
 /* --------------------------------------------------------------------------
@@ -1081,59 +1244,134 @@
   font-size: 0.82rem;
   table-layout: fixed;
   outline: none;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
 }
 
 .presentation-grid th {
-  padding: 8px 10px;
+  padding: 10px 12px;
   text-align: left;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.05em;
   color: var(--text-secondary);
   background: var(--bg);
-  border-bottom: 2px solid var(--border);
+  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 2;
   white-space: nowrap;
+  user-select: none;
 }
 
 .presentation-grid td {
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+  height: 38px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
   vertical-align: middle;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: background 0.1s ease;
 }
 
-.presentation-grid tr:last-child td {
-  border-bottom: none;
+/* Alternating row colors */
+.presentation-grid .item-row:nth-child(even) td {
+  background: rgba(0,0,0,0.015);
 }
 
 /* --------------------------------------------------------------------------
-   Contenteditable cells
+   Drag Handle Column
    -------------------------------------------------------------------------- */
 
-.presentation-grid td[contenteditable] {
+.pg-col-drag {
+  width: 28px;
+}
+
+.pg-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  cursor: grab;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  border-radius: 4px;
+}
+
+.pg-drag-handle:active {
+  cursor: grabbing;
+}
+
+.pg-drag-handle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.item-row:hover .pg-drag-handle,
+.header-row:hover .pg-drag-handle {
+  opacity: 0.5;
+}
+
+.pg-drag-handle:hover {
+  opacity: 1 !important;
+  color: var(--text-main);
+  background: rgba(0,0,0,0.05);
+}
+
+/* Dragging state */
+.pg-dragging {
+  opacity: 0.4;
+}
+
+.pg-drag-over td {
+  box-shadow: 0 -2px 0 0 var(--primary) inset;
+}
+
+.pg-drag-ghost {
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-lg);
+  transform: scale(1.01);
+  opacity: 0.9;
+}
+
+/* --------------------------------------------------------------------------
+   Contenteditable cells — Focused & Editing
+   -------------------------------------------------------------------------- */
+
+.presentation-grid td.pg-cell-editable {
   cursor: text;
-  border-radius: 2px;
-  transition: background 0.1s, box-shadow 0.1s;
+  border-radius: 0;
   outline: none;
   min-height: 1.5em;
+  border-bottom: 1px dashed rgba(0,0,0,0.08);
+  transition: background 0.1s ease, box-shadow 0.1s ease;
 }
 
-.presentation-grid td[contenteditable]:hover {
-  background: rgba(99, 102, 241, 0.04);
-}
-
-.presentation-grid td[contenteditable]:focus,
-.presentation-grid td[contenteditable].editing {
-  background: rgba(99, 102, 241, 0.08);
+/* Focused cell (navigated to, not yet editing) */
+.presentation-grid td.pg-cell-focused {
   box-shadow: inset 0 0 0 2px var(--primary);
+  background: rgba(79, 70, 229, 0.04);
+  z-index: 1;
+  position: relative;
+}
+
+/* Editing cell (user is typing) */
+.presentation-grid td.pg-cell-editing {
+  box-shadow: inset 0 0 0 2px var(--primary);
+  background: #fff;
   white-space: normal;
   overflow: visible;
+  z-index: 1;
+  position: relative;
+}
+
+.presentation-grid td.pg-cell-editable:hover {
+  background: rgba(79, 70, 229, 0.03);
 }
 
 /* --------------------------------------------------------------------------
@@ -1141,52 +1379,54 @@
    -------------------------------------------------------------------------- */
 
 /* Header (section) row */
-.presentation-grid .header-row {
-  background: var(--bg);
+.presentation-grid .header-row td {
+  background: #f1f5f9;
+  border-bottom: 1px solid var(--border);
+  height: 42px;
 }
 
-.presentation-grid .header-row td {
-  border-bottom: 2px solid var(--border);
+.presentation-grid .header-row td:first-child {
+  border-left: 4px solid var(--primary);
 }
 
 .presentation-grid .pg-cell-header-name {
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   color: var(--text-main);
   letter-spacing: 0.01em;
-  padding: 10px 12px;
+  padding-left: 8px;
 }
 
-/* Item row */
+/* Item row hover */
 .presentation-grid .item-row:hover td {
-  background: var(--surface-hover);
+  background: #f0f7ff;
 }
 
 /* Selected row */
-.presentation-grid .selected-row {
-  background: rgba(99, 102, 241, 0.06) !important;
+.presentation-grid .selected-row td {
+  background: #eef2ff !important;
 }
 
-.presentation-grid .selected-row td {
-  background: rgba(99, 102, 241, 0.06) !important;
+.presentation-grid .selected-row td:first-child {
+  box-shadow: inset 3px 0 0 0 var(--primary);
 }
 
 /* Hidden (soft-deleted) row */
 .presentation-grid .hidden-row td {
   text-decoration: line-through;
-  opacity: 0.4;
+  opacity: 0.35;
   background: var(--bg);
 }
 
 /* Changed source indicator */
-.presentation-grid .changed-row {
-  border-left: 3px solid #f59e0b;
+.presentation-grid .changed-row td:first-child {
+  box-shadow: inset 3px 0 0 0 #f59e0b;
 }
 
 .changed-indicator {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #f59e0b;
   margin-left: 4px;
@@ -1194,25 +1434,38 @@
 }
 
 /* Subtotal row */
-.presentation-grid .subtotal-row {
-  background: rgba(99, 102, 241, 0.03);
-}
-
 .presentation-grid .subtotal-row td {
-  border-bottom: 2px solid var(--border);
+  background: #f8fafc;
+  border-bottom: 1px solid var(--border);
   font-size: 0.78rem;
+  font-style: italic;
+  color: var(--text-secondary);
+  height: 34px;
 }
 
-/* Grand total row */
-.presentation-grid .grand-total-row {
-  background: var(--bg);
+.presentation-grid .subtotal-row .pg-cell-total,
+.presentation-grid .subtotal-row .pg-cell-monthly {
+  font-weight: 600;
+  color: var(--text-main);
+  font-style: normal;
 }
 
+/* Grand total row — sticky dark bar */
 .presentation-grid .grand-total-row td {
-  border-top: 2px solid var(--text-main);
+  background: #1f2937;
+  color: #fff;
   border-bottom: none;
-  padding: 10px;
-  font-size: 0.9rem;
+  padding: 12px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+.presentation-grid .grand-total-row .pg-cell-total,
+.presentation-grid .grand-total-row .pg-cell-monthly {
+  color: #fff;
 }
 
 /* --------------------------------------------------------------------------
@@ -1221,18 +1474,21 @@
 
 .pg-cell-check {
   text-align: center;
-  width: 40px;
+  width: 36px;
+  padding: 0 4px;
 }
 
 .pg-cell-check input[type="checkbox"] {
   cursor: pointer;
   accent-color: var(--primary);
+  width: 15px;
+  height: 15px;
 }
 
 .pg-cell-sku {
   color: var(--text-secondary);
   font-family: ui-monospace, monospace;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
 }
 
 .pg-cell-total,
@@ -1244,20 +1500,262 @@
 .pg-cell-actions {
   text-align: center;
   white-space: nowrap;
+  width: 60px;
+  padding: 0 4px;
 }
 
+/* Move buttons — SVG arrows, hover-only */
 .pg-move-btn {
-  padding: 2px 4px !important;
-  font-size: 0.65rem !important;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
   color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s ease;
+}
+
+.item-row:hover .pg-move-btn,
+.header-row:hover .pg-move-btn {
+  opacity: 0.5;
 }
 
 .pg-move-btn:hover {
+  opacity: 1 !important;
+  background: rgba(0,0,0,0.06);
   color: var(--primary);
 }
 
-/* Danger outline button for toolbar */
+.pg-move-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* --------------------------------------------------------------------------
+   Merged item badge
+   -------------------------------------------------------------------------- */
+
+.pg-merged-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--primary);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  margin-left: 6px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.pg-merged-badge:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.pg-merged-badge svg {
+  width: 10px;
+  height: 10px;
+}
+
+.pg-merged-subrow td {
+  background: rgba(99, 102, 241, 0.03) !important;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  height: 30px;
+  padding-left: 48px;
+}
+
+.pg-unmerge-btn {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(239,68,68,0.3);
+  background: transparent;
+  color: #ef4444;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s ease;
+}
+
+.item-row:hover .pg-unmerge-btn,
+.pg-merged-subrow:hover .pg-unmerge-btn {
+  opacity: 1;
+}
+
+.pg-unmerge-btn:hover {
+  background: rgba(239,68,68,0.06);
+}
+
+/* --------------------------------------------------------------------------
+   Context Menu
+   -------------------------------------------------------------------------- */
+
+.pe-context-menu {
+  position: fixed;
+  z-index: 9999;
+  width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
+  padding: 4px 0;
+  animation: pe-ctxIn 0.1s ease-out;
+  user-select: none;
+}
+
+@keyframes pe-ctxIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.pe-context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-size: 0.8rem;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: background 0.08s ease;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+
+.pe-context-menu-item:hover {
+  background: var(--primary-light);
+}
+
+.pe-context-menu-item svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.pe-context-menu-item.pe-ctx-danger {
+  color: #ef4444;
+}
+
+.pe-context-menu-item.pe-ctx-danger svg {
+  color: #ef4444;
+}
+
+.pe-context-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 10px;
+}
+
+/* --------------------------------------------------------------------------
+   Floating Action Bar (multi-select)
+   -------------------------------------------------------------------------- */
+
+.pe-floating-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: #1f2937;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 500;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.1);
+  z-index: 100;
+  animation: pe-barIn 0.2s ease-out;
+  white-space: nowrap;
+}
+
+@keyframes pe-barIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.pe-floating-bar-label {
+  margin-right: 4px;
+  color: rgba(255,255,255,0.7);
+}
+
+.pe-floating-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pe-floating-bar-btn:hover {
+  background: rgba(255,255,255,0.2);
+  border-color: rgba(255,255,255,0.35);
+}
+
+.pe-floating-bar-btn.pe-fab-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.pe-floating-bar-btn.pe-fab-primary:hover {
+  background: var(--primary-hover);
+}
+
+.pe-floating-bar-btn.pe-fab-danger {
+  background: rgba(239,68,68,0.2);
+  border-color: rgba(239,68,68,0.3);
+}
+
+.pe-floating-bar-btn.pe-fab-danger:hover {
+  background: rgba(239,68,68,0.35);
+}
+
+/* --------------------------------------------------------------------------
+   Row Animations
+   -------------------------------------------------------------------------- */
+
+@keyframes pe-rowIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pe-rowOut {
+  from { opacity: 1; transform: translateY(0); max-height: 50px; }
+  to { opacity: 0; transform: translateY(-4px); max-height: 0; }
+}
+
+.pe-row-enter td {
+  animation: pe-rowIn 0.2s ease-out;
+}
+
+.pe-row-exit td {
+  animation: pe-rowOut 0.15s ease-out forwards;
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Danger outline button for toolbar
+   -------------------------------------------------------------------------- */
+
 .btn-danger-outline {
   border: 1px solid #ef4444;
   color: #ef4444;
@@ -1273,16 +1771,35 @@
    -------------------------------------------------------------------------- */
 
 [data-theme="dark"] .presentation-overlay {
-  background: var(--surface);
+  background: var(--bg);
 }
 
-[data-theme="dark"] .presentation-grid td[contenteditable]:hover {
+[data-theme="dark"] .presentation-grid th {
+  background: var(--bg);
+}
+
+[data-theme="dark"] .presentation-grid .header-row td {
+  background: rgba(255,255,255,0.04);
+}
+
+[data-theme="dark"] .presentation-grid td.pg-cell-editable {
+  border-bottom-color: rgba(255,255,255,0.06);
+}
+
+[data-theme="dark"] .presentation-grid td.pg-cell-focused {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+[data-theme="dark"] .presentation-grid td.pg-cell-editing {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+[data-theme="dark"] .presentation-grid td.pg-cell-editable:hover {
   background: rgba(99, 102, 241, 0.08);
 }
 
-[data-theme="dark"] .presentation-grid td[contenteditable]:focus,
-[data-theme="dark"] .presentation-grid td[contenteditable].editing {
-  background: rgba(99, 102, 241, 0.15);
+[data-theme="dark"] .presentation-grid .item-row:hover td {
+  background: rgba(99, 102, 241, 0.06);
 }
 
 [data-theme="dark"] .presentation-grid .selected-row td {
@@ -1291,6 +1808,50 @@
 
 [data-theme="dark"] .presentation-grid .hidden-row td {
   background: rgba(30, 30, 40, 0.5);
+}
+
+[data-theme="dark"] .presentation-grid .subtotal-row td {
+  background: rgba(255,255,255,0.02);
+}
+
+[data-theme="dark"] .presentation-grid .grand-total-row td {
+  background: #111827;
+}
+
+[data-theme="dark"] .pe-context-menu {
+  background: #1f2937;
+  border-color: rgba(255,255,255,0.1);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+
+[data-theme="dark"] .pe-context-menu-item:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+[data-theme="dark"] .pe-pill-btn {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.1);
+  color: var(--text-main);
+}
+
+[data-theme="dark"] .pe-pill-btn:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+[data-theme="dark"] .pe-kbd {
+  background: rgba(255,255,255,0.08);
+}
+
+[data-theme="dark"] .pg-merged-badge {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+[data-theme="dark"] .pg-drag-handle:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+[data-theme="dark"] .presentation-grid .item-row:nth-child(even) td {
+  background: rgba(255,255,255,0.015);
 }
 
 [data-theme="dark"] .btn-danger-outline {

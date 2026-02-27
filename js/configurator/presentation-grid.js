@@ -1,18 +1,29 @@
-// Presentation Grid - Excel-like spreadsheet component
-// Contenteditable cells, arrow key navigation, section headers, merge, reorder.
+// Presentation Grid - Premium Excel-like spreadsheet component
+// Context menu, drag reorder, arrow key navigation, section headers, merge, multi-select.
 // Pure DOM manipulation for performance.
 
 import { currency } from '../utils/format.js';
+import { showToast } from '../components/toast.js';
+
+// --- SVG Icons (inline Heroicons) ---
+
+const ICONS = {
+  grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>',
+  arrowUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5"/></svg>',
+  arrowDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>',
+  headerInsert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>',
+  duplicate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>',
+  merge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg>',
+  moveTop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4.5h18m-9 3.75V21m0-12.75l-3 3m3-3l3 3"/></svg>',
+  moveBottom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 19.5h18m-9-3.75V3m0 12.75l-3-3m3 3l3-3"/></svg>',
+  chevronDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>',
+  chevronRight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>',
+  empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>',
+};
 
 /**
  * Create the Presentation Grid.
- *
- * @param {Object} props
- * @param {Array}   props.items              - Array of presentationItem objects
- * @param {Array}   props.lineItems          - Source lineItems for diff detection
- * @param {Array}   props.licenses           - License objects for SLA lookups
- * @param {Function} props.onChange           - (items) => void, called on any edit
- * @returns {{ element: HTMLElement, update: Function, getItems: Function }}
  */
 export function createPresentationGrid({ items, lineItems, licenses, onChange }) {
   const el = document.createElement('div');
@@ -26,13 +37,19 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
   };
 
   let selectedRows = new Set();
-  let focusedCell = null; // { row, col }
-  let editingCell = null; // { row, col }
+  let focusedCell = null;   // { row, col }
+  let editingCell = null;   // { row, col }
   let editOriginalValue = '';
+  let expandedMerges = new Set(); // track expanded merge badges
+  let lastClickedRow = null; // for shift+click range select
+  let contextMenu = null;    // current context menu element
 
-  // Editable column indices (0-based within data cols): displayName=0, qty=2, unitPrice=3, margin=4, notes=7
+  // Editable column indices: displayName=0, qty=2, unitPrice=3, margin=4, notes=7
   const EDITABLE_COLS = [0, 2, 3, 4, 7];
-  const COL_COUNT = 8; // displayName, sku, qty, unitPrice, margin, total, monthly, notes
+  const COL_COUNT = 8;
+
+  // Callbacks for the editor to hook into
+  let onSelectionChange = null;
 
   // --- Helpers ---
 
@@ -53,20 +70,16 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
   function calcTotal(pItem) {
     const sources = getSourceItems(pItem);
     if (sources.length === 0) return 0;
-
     const qty = pItem.displayQty != null ? pItem.displayQty : sources.reduce((s, i) => s + i.amount, 0);
     const price = pItem.displayPrice != null ? pItem.displayPrice : sources.reduce((s, i) => s + i.price, 0) / (sources.length || 1);
     const margin = pItem.displayMargin != null ? pItem.displayMargin : sources[0].margin;
-
     return price * qty * (1 + margin / 100);
   }
 
   function calcMonthly(pItem) {
     const sources = getSourceItems(pItem);
     if (sources.length === 0) return 0;
-
     const total = calcTotal(pItem);
-    // Find max SLA percentage from source items
     let maxSlaPct = 0;
     sources.forEach(src => {
       if (src.itemType === 'servicepack') return;
@@ -100,7 +113,6 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     if (pItem.displayPrice != null) return pItem.displayPrice;
     const sources = getSourceItems(pItem);
     if (sources.length === 0) return 0;
-    // average unit price for merged items
     return sources.reduce((s, i) => s + i.price, 0) / sources.length;
   }
 
@@ -112,7 +124,6 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
 
   function hasSourceChanged(pItem) {
     if (pItem.type !== 'item' || !pItem.sourceIndices || pItem.sourceIndices.length === 0) return false;
-    // Compare with snapshot stored in pItem._sourceSnapshot
     if (!pItem._sourceSnapshot) return false;
     const currentSources = getSourceItems(pItem);
     const snap = pItem._sourceSnapshot;
@@ -131,12 +142,15 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     if (state.onChange) state.onChange([...state.items]);
   }
 
+  function emitSelectionChange() {
+    if (onSelectionChange) onSelectionChange(selectedRows.size);
+  }
+
   // --- Section subtotals ---
 
   function getSections(visibleItems) {
     const sections = [];
     let currentSection = { header: null, items: [] };
-
     visibleItems.forEach(item => {
       if (item.type === 'header') {
         if (currentSection.items.length > 0 || currentSection.header) {
@@ -168,10 +182,358 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     }
   }
 
+  function focusCell(row, col) {
+    // Remove previous focus
+    const prev = el.querySelector('.pg-cell-focused');
+    if (prev) prev.classList.remove('pg-cell-focused');
+
+    focusedCell = { row, col };
+    editingCell = null;
+
+    const cell = el.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+    if (cell) {
+      cell.classList.add('pg-cell-focused');
+      cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }
+
+  function enterEditMode(row, col) {
+    const cell = el.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+    if (!cell || cell.getAttribute('contenteditable') !== 'true') return;
+
+    cell.classList.remove('pg-cell-focused');
+    cell.classList.add('pg-cell-editing');
+    editingCell = { row, col };
+    editOriginalValue = cell.textContent;
+    cell.focus();
+
+    // Select all text
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function exitEditMode(confirm) {
+    if (!editingCell) return;
+    const cell = el.querySelector(`[data-row="${editingCell.row}"][data-col="${editingCell.col}"]`);
+    if (cell) {
+      cell.classList.remove('pg-cell-editing');
+      if (!confirm) {
+        cell.textContent = editOriginalValue;
+      }
+      cell.blur();
+    }
+    const prevEdit = { ...editingCell };
+    editingCell = null;
+    return prevEdit;
+  }
+
+  // --- Context Menu ---
+
+  function showContextMenu(e, pItem) {
+    e.preventDefault();
+    closeContextMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'pe-context-menu';
+
+    const visible = getVisibleItems();
+    const idx = visible.findIndex(i => i.id === pItem.id);
+
+    const menuItems = [];
+
+    if (pItem.type === 'item') {
+      menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Header Above', action: () => addHeaderAt(pItem, 'above') });
+      menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Header Below', action: () => addHeaderAt(pItem, 'below') });
+      menuItems.push({ icon: ICONS.duplicate, label: 'Duplicate Row', action: () => duplicateItem(pItem) });
+      menuItems.push({ icon: ICONS.trash, label: 'Delete Row', action: () => deleteItemWithUndo(pItem), danger: true });
+
+      // Merge with above/below
+      if (idx > 0 && visible[idx - 1].type === 'item') {
+        menuItems.push({ icon: ICONS.merge, label: 'Merge with Above', action: () => mergeWith(pItem, visible[idx - 1]) });
+      }
+      if (idx < visible.length - 1 && visible[idx + 1].type === 'item') {
+        menuItems.push({ icon: ICONS.merge, label: 'Merge with Below', action: () => mergeWith(pItem, visible[idx + 1]) });
+      }
+
+      menuItems.push('sep');
+      menuItems.push({ icon: ICONS.moveTop, label: 'Move to Top', action: () => moveToEdge(pItem, 'top') });
+      menuItems.push({ icon: ICONS.moveBottom, label: 'Move to Bottom', action: () => moveToEdge(pItem, 'bottom') });
+    } else if (pItem.type === 'header') {
+      menuItems.push({ icon: ICONS.duplicate, label: 'Duplicate Header', action: () => duplicateItem(pItem) });
+      menuItems.push({ icon: ICONS.trash, label: 'Delete Header', action: () => deleteItemWithUndo(pItem), danger: true });
+      menuItems.push('sep');
+      menuItems.push({ icon: ICONS.moveTop, label: 'Move to Top', action: () => moveToEdge(pItem, 'top') });
+      menuItems.push({ icon: ICONS.moveBottom, label: 'Move to Bottom', action: () => moveToEdge(pItem, 'bottom') });
+    }
+
+    menuItems.forEach(item => {
+      if (item === 'sep') {
+        const sep = document.createElement('div');
+        sep.className = 'pe-context-menu-sep';
+        menu.appendChild(sep);
+        return;
+      }
+      const btn = document.createElement('button');
+      btn.className = 'pe-context-menu-item' + (item.danger ? ' pe-ctx-danger' : '');
+      btn.innerHTML = item.icon + '<span>' + item.label + '</span>';
+      btn.addEventListener('click', () => {
+        closeContextMenu();
+        item.action();
+      });
+      menu.appendChild(btn);
+    });
+
+    // Position
+    document.body.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    let x = e.clientX;
+    let y = e.clientY;
+    if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 8;
+    if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 8;
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+
+    contextMenu = menu;
+
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', closeContextMenu, { once: true });
+      document.addEventListener('contextmenu', closeContextMenu, { once: true });
+    }, 0);
+  }
+
+  function closeContextMenu() {
+    if (contextMenu) {
+      contextMenu.remove();
+      contextMenu = null;
+    }
+  }
+
+  // --- Context Menu Actions ---
+
+  function addHeaderAt(pItem, position) {
+    const visible = getVisibleItems();
+    const idx = visible.findIndex(i => i.id === pItem.id);
+    let order;
+    if (position === 'above') {
+      order = idx > 0 ? (visible[idx - 1].order + pItem.order) / 2 : pItem.order - 0.5;
+    } else {
+      order = idx < visible.length - 1 ? (pItem.order + visible[idx + 1].order) / 2 : pItem.order + 0.5;
+    }
+
+    const header = {
+      id: generateId(),
+      sourceIndices: [],
+      type: 'header',
+      displayName: 'New Section',
+      displayPrice: null,
+      displayQty: null,
+      displayMargin: null,
+      note: '',
+      hidden: false,
+      order
+    };
+    state.items.push(header);
+    reindex();
+    emitChange();
+    render();
+  }
+
+  function duplicateItem(pItem) {
+    const dup = {
+      ...pItem,
+      id: generateId(),
+      order: pItem.order + 0.5,
+      sourceIndices: pItem.sourceIndices ? [...pItem.sourceIndices] : [],
+      _sourceSnapshot: pItem._sourceSnapshot ? pItem._sourceSnapshot.map(s => ({ ...s })) : undefined,
+      _mergedNames: pItem._mergedNames ? [...pItem._mergedNames] : undefined,
+    };
+    state.items.push(dup);
+    reindex();
+    emitChange();
+    render();
+    showToast('Row duplicated', 'success');
+  }
+
+  function deleteItemWithUndo(pItem) {
+    pItem.hidden = true;
+    emitChange();
+    render();
+    showToast('Row deleted. <button onclick="this.closest(\'.toast\')?.dispatchEvent(new CustomEvent(\'undo\'))" style="background:none;border:none;color:var(--primary);text-decoration:underline;cursor:pointer;font-size:inherit;">Undo</button>', 'info');
+
+    // Listen for undo on the latest toast
+    const toasts = document.querySelectorAll('.toast');
+    const latestToast = toasts[toasts.length - 1];
+    if (latestToast) {
+      latestToast.addEventListener('undo', () => {
+        pItem.hidden = false;
+        emitChange();
+        render();
+      }, { once: true });
+    }
+  }
+
+  function mergeWith(pItem, otherItem) {
+    const items = [otherItem, pItem].sort((a, b) => a.order - b.order);
+    mergeTwoItems(items[0], items[1]);
+  }
+
+  function mergeTwoItems(itemA, itemB) {
+    const combinedSourceIndices = [...new Set([...(itemA.sourceIndices || []), ...(itemB.sourceIndices || [])])];
+    const nameA = getDisplayName(itemA);
+    const nameB = getDisplayName(itemB);
+
+    const merged = {
+      id: generateId(),
+      sourceIndices: combinedSourceIndices,
+      type: 'item',
+      displayName: nameA + ' + ' + nameB,
+      displayQty: getDisplayQty(itemA) + getDisplayQty(itemB),
+      displayPrice: null,
+      displayMargin: null,
+      note: [itemA.note, itemB.note].filter(Boolean).join('; '),
+      hidden: false,
+      order: Math.min(itemA.order, itemB.order),
+      _mergedNames: [nameA, nameB],
+    };
+
+    // Weighted average price
+    const totalValue = getDisplayPrice(itemA) * getDisplayQty(itemA) + getDisplayPrice(itemB) * getDisplayQty(itemB);
+    merged.displayPrice = totalValue / (merged.displayQty || 1);
+    merged.displayMargin = (getDisplayMargin(itemA) + getDisplayMargin(itemB)) / 2;
+
+    state.items = state.items.filter(i => i.id !== itemA.id && i.id !== itemB.id);
+    state.items.push(merged);
+    reindex();
+    emitChange();
+    render();
+    showToast('Items merged', 'success');
+  }
+
+  function moveToEdge(pItem, edge) {
+    const visible = getVisibleItems();
+    if (edge === 'top') {
+      pItem.order = visible[0].order - 1;
+    } else {
+      pItem.order = visible[visible.length - 1].order + 1;
+    }
+    reindex();
+    emitChange();
+    render();
+  }
+
+  // --- Drag & Drop ---
+
+  let dragItem = null;
+  let dragGhost = null;
+
+  function handleDragStart(e, pItem) {
+    dragItem = pItem;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', pItem.id);
+
+    // Style the source row
+    const row = e.target.closest('tr');
+    if (row) {
+      requestAnimationFrame(() => row.classList.add('pg-dragging'));
+    }
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    // Highlight drop target
+    const tr = e.target.closest('tr');
+    if (tr && tr.dataset.itemId) {
+      el.querySelectorAll('.pg-drag-over').forEach(r => r.classList.remove('pg-drag-over'));
+      tr.classList.add('pg-drag-over');
+    }
+  }
+
+  function handleDragLeave(e) {
+    const tr = e.target.closest('tr');
+    if (tr) tr.classList.remove('pg-drag-over');
+  }
+
+  function handleDrop(e, targetItem) {
+    e.preventDefault();
+    el.querySelectorAll('.pg-drag-over, .pg-dragging').forEach(r => {
+      r.classList.remove('pg-drag-over', 'pg-dragging');
+    });
+
+    if (!dragItem || dragItem.id === targetItem.id) {
+      dragItem = null;
+      return;
+    }
+
+    // Reorder: place dragItem before targetItem
+    const visible = getVisibleItems();
+    const targetIdx = visible.findIndex(i => i.id === targetItem.id);
+
+    if (targetIdx >= 0) {
+      let newOrder;
+      if (targetIdx === 0) {
+        newOrder = visible[0].order - 1;
+      } else {
+        newOrder = (visible[targetIdx - 1].order + visible[targetIdx].order) / 2;
+      }
+      dragItem.order = newOrder;
+      reindex();
+      emitChange();
+      render();
+    }
+    dragItem = null;
+  }
+
+  function handleDragEnd() {
+    el.querySelectorAll('.pg-drag-over, .pg-dragging').forEach(r => {
+      r.classList.remove('pg-drag-over', 'pg-dragging');
+    });
+    dragItem = null;
+  }
+
+  // --- Selection ---
+
+  function handleRowCheckbox(pItemId, checked, shiftKey) {
+    if (shiftKey && lastClickedRow != null) {
+      // Range select
+      const visible = getVisibleItems();
+      const lastIdx = visible.findIndex(i => i.id === lastClickedRow);
+      const curIdx = visible.findIndex(i => i.id === pItemId);
+      if (lastIdx >= 0 && curIdx >= 0) {
+        const [start, end] = lastIdx < curIdx ? [lastIdx, curIdx] : [curIdx, lastIdx];
+        for (let i = start; i <= end; i++) {
+          selectedRows.add(visible[i].id);
+        }
+      }
+    } else {
+      if (checked) selectedRows.add(pItemId);
+      else selectedRows.delete(pItemId);
+    }
+    lastClickedRow = pItemId;
+    emitSelectionChange();
+    render();
+  }
+
   // --- Render ---
 
   function render() {
     el.innerHTML = '';
+
+    const visibleItems = getVisibleItems();
+
+    // Empty state
+    if (visibleItems.length === 0) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'pe-empty-state';
+      emptyDiv.innerHTML = ICONS.empty + '<h3>No items in your quote yet</h3><p>Go back to the configurator to add items, then return here to customize your export.</p>';
+      el.appendChild(emptyDiv);
+      return;
+    }
 
     const table = document.createElement('table');
     table.className = 'presentation-grid';
@@ -181,16 +543,17 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     const thead = document.createElement('thead');
     const headRow = document.createElement('tr');
     const headers = [
-      { text: '', cls: 'pg-col-check', style: 'width:40px;' },
+      { text: '', cls: 'pg-col-drag', style: 'width:28px;' },
+      { text: '', cls: 'pg-col-check', style: 'width:36px;' },
       { text: 'Display Name', cls: 'pg-col-name', style: '' },
-      { text: 'SKU', cls: 'pg-col-sku', style: 'width:150px;' },
-      { text: 'Qty', cls: 'pg-col-qty', style: 'width:70px;' },
+      { text: 'SKU', cls: 'pg-col-sku', style: 'width:130px;' },
+      { text: 'Qty', cls: 'pg-col-qty', style: 'width:60px;' },
       { text: 'Unit Price', cls: 'pg-col-price', style: 'width:100px;' },
-      { text: 'Margin %', cls: 'pg-col-margin', style: 'width:85px;' },
+      { text: 'Margin %', cls: 'pg-col-margin', style: 'width:80px;' },
       { text: 'Total', cls: 'pg-col-total', style: 'width:110px;' },
-      { text: 'Monthly', cls: 'pg-col-monthly', style: 'width:100px;' },
-      { text: 'Notes', cls: 'pg-col-notes', style: 'width:150px;' },
-      { text: '', cls: 'pg-col-actions', style: 'width:70px;' }
+      { text: 'Monthly', cls: 'pg-col-monthly', style: 'width:95px;' },
+      { text: 'Notes', cls: 'pg-col-notes', style: 'width:140px;' },
+      { text: '', cls: 'pg-col-actions', style: 'width:60px;' }
     ];
     headers.forEach(h => {
       const th = document.createElement('th');
@@ -204,109 +567,37 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
 
     // Body
     const tbody = document.createElement('tbody');
-    const visibleItems = getVisibleItems();
     const sections = getSections(visibleItems);
     let rowIndex = 0;
-
-    // Also render hidden items at end (for un-delete)
     const hiddenItems = state.items.filter(i => i.hidden).sort((a, b) => a.order - b.order);
 
     sections.forEach((section) => {
-      // Header row
       if (section.header) {
-        const hItem = section.header;
-        const tr = document.createElement('tr');
-        tr.className = 'header-row';
-        tr.dataset.itemId = hItem.id;
-
-        // Checkbox cell
-        const tdCheck = document.createElement('td');
-        tdCheck.className = 'pg-cell-check';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = selectedRows.has(hItem.id);
-        cb.addEventListener('change', () => {
-          if (cb.checked) selectedRows.add(hItem.id);
-          else selectedRows.delete(hItem.id);
-          render();
-        });
-        tdCheck.appendChild(cb);
-        tr.appendChild(tdCheck);
-
-        // Name cell (spans remaining cols)
-        const tdName = document.createElement('td');
-        tdName.colSpan = 8;
-        tdName.className = 'pg-cell-header-name';
-        tdName.setAttribute('contenteditable', 'true');
-        tdName.textContent = getDisplayName(hItem);
-        tdName.addEventListener('blur', () => {
-          const newVal = tdName.textContent.trim();
-          if (newVal !== getDisplayName(hItem)) {
-            hItem.displayName = newVal || 'Section';
-            emitChange();
-          }
-        });
-        tdName.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') { e.preventDefault(); tdName.blur(); }
-          if (e.key === 'Escape') { tdName.textContent = getDisplayName(hItem); tdName.blur(); }
-        });
-        tr.appendChild(tdName);
-
-        // Actions cell
-        const tdAct = document.createElement('td');
-        tdAct.className = 'pg-cell-actions';
-        appendMoveButtons(tdAct, hItem);
-        tr.appendChild(tdAct);
-
-        if (selectedRows.has(hItem.id)) tr.classList.add('selected-row');
+        const tr = createHeaderRow(section.header, rowIndex);
         tbody.appendChild(tr);
         rowIndex++;
       }
 
-      // Item rows
       section.items.forEach(pItem => {
         const tr = createItemRow(pItem, rowIndex);
         tbody.appendChild(tr);
         rowIndex++;
+
+        // Expanded merge sub-rows
+        if (pItem._mergedNames && pItem._mergedNames.length > 1 && expandedMerges.has(pItem.id)) {
+          pItem._mergedNames.forEach(name => {
+            const subTr = document.createElement('tr');
+            subTr.className = 'pg-merged-subrow';
+            subTr.innerHTML = '<td></td><td></td><td colspan="8" style="padding-left:48px;font-size:0.75rem;color:var(--text-secondary);">' +
+              escapeHtml(name) + '</td><td></td>';
+            tbody.appendChild(subTr);
+          });
+        }
       });
 
-      // Subtotal row if section has header and items
+      // Subtotal row
       if (section.header && section.items.length > 0) {
-        const subTr = document.createElement('tr');
-        subTr.className = 'subtotal-row';
-
-        const subEmpty1 = document.createElement('td');
-        subTr.appendChild(subEmpty1);
-        const subLabel = document.createElement('td');
-        subLabel.textContent = 'Subtotal';
-        subLabel.style.cssText = 'text-align:right;font-weight:600;font-size:0.8rem;color:var(--text-secondary);';
-        subTr.appendChild(subLabel);
-        // empty sku
-        subTr.appendChild(document.createElement('td'));
-        // empty qty
-        subTr.appendChild(document.createElement('td'));
-        // empty price
-        subTr.appendChild(document.createElement('td'));
-        // empty margin
-        subTr.appendChild(document.createElement('td'));
-
-        const subTotal = document.createElement('td');
-        subTotal.className = 'pg-cell-total';
-        const sectionTotal = section.items.reduce((s, i) => s + calcTotal(i), 0);
-        subTotal.textContent = currency(sectionTotal);
-        subTotal.style.fontWeight = '600';
-        subTr.appendChild(subTotal);
-
-        const subMonthly = document.createElement('td');
-        subMonthly.className = 'pg-cell-monthly';
-        const sectionMonthly = section.items.reduce((s, i) => s + calcMonthly(i), 0);
-        subMonthly.textContent = sectionMonthly > 0 ? currency(sectionMonthly) : '';
-        subTr.appendChild(subMonthly);
-
-        // empty notes + actions
-        subTr.appendChild(document.createElement('td'));
-        subTr.appendChild(document.createElement('td'));
-
+        const subTr = createSubtotalRow(section);
         tbody.appendChild(subTr);
       }
     });
@@ -318,42 +609,85 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     });
 
     // Grand total row
-    const allVisible = visibleItems.filter(i => i.type === 'item');
-    const grandTr = document.createElement('tr');
-    grandTr.className = 'grand-total-row';
-
-    const gtEmpty1 = document.createElement('td');
-    grandTr.appendChild(gtEmpty1);
-    const gtLabel = document.createElement('td');
-    gtLabel.textContent = 'Grand Total';
-    gtLabel.style.cssText = 'text-align:right;font-weight:700;font-size:0.9rem;';
-    grandTr.appendChild(gtLabel);
-    // empty sku, qty, price, margin
-    for (let i = 0; i < 4; i++) grandTr.appendChild(document.createElement('td'));
-
-    const gtTotal = document.createElement('td');
-    gtTotal.className = 'pg-cell-total';
-    gtTotal.style.fontWeight = '700';
-    gtTotal.textContent = currency(allVisible.reduce((s, i) => s + calcTotal(i), 0));
-    grandTr.appendChild(gtTotal);
-
-    const gtMonthly = document.createElement('td');
-    gtMonthly.className = 'pg-cell-monthly';
-    gtMonthly.style.fontWeight = '700';
-    const totalMonthly = allVisible.reduce((s, i) => s + calcMonthly(i), 0);
-    gtMonthly.textContent = totalMonthly > 0 ? currency(totalMonthly) : '';
-    grandTr.appendChild(gtMonthly);
-
-    // empty notes + actions
-    grandTr.appendChild(document.createElement('td'));
-    grandTr.appendChild(document.createElement('td'));
+    const allVisibleItems = visibleItems.filter(i => i.type === 'item');
+    const grandTr = createGrandTotalRow(allVisibleItems);
     tbody.appendChild(grandTr);
 
     table.appendChild(tbody);
     el.appendChild(table);
 
-    // Keyboard navigation on the table
+    // Keyboard navigation
     table.addEventListener('keydown', handleTableKeydown);
+
+    // Restore focus if we had one
+    if (focusedCell && !editingCell) {
+      const cell = el.querySelector(`[data-row="${focusedCell.row}"][data-col="${focusedCell.col}"]`);
+      if (cell) cell.classList.add('pg-cell-focused');
+    }
+  }
+
+  function createHeaderRow(hItem, rowIndex) {
+    const tr = document.createElement('tr');
+    tr.className = 'header-row';
+    tr.dataset.itemId = hItem.id;
+    tr.draggable = true;
+    tr.addEventListener('dragstart', (e) => handleDragStart(e, hItem));
+    tr.addEventListener('dragover', handleDragOver);
+    tr.addEventListener('dragleave', handleDragLeave);
+    tr.addEventListener('drop', (e) => handleDrop(e, hItem));
+    tr.addEventListener('dragend', handleDragEnd);
+    tr.addEventListener('contextmenu', (e) => showContextMenu(e, hItem));
+
+    // Drag handle
+    const tdDrag = document.createElement('td');
+    tdDrag.className = 'pg-col-drag';
+    const grip = document.createElement('span');
+    grip.className = 'pg-drag-handle';
+    grip.innerHTML = ICONS.grip;
+    tdDrag.appendChild(grip);
+    tr.appendChild(tdDrag);
+
+    // Checkbox
+    const tdCheck = document.createElement('td');
+    tdCheck.className = 'pg-cell-check';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = selectedRows.has(hItem.id);
+    cb.addEventListener('change', (e) => handleRowCheckbox(hItem.id, cb.checked, e.shiftKey));
+    cb.addEventListener('click', (e) => {
+      // Re-handle to capture shiftKey
+      handleRowCheckbox(hItem.id, cb.checked, e.shiftKey);
+    });
+    tdCheck.appendChild(cb);
+    tr.appendChild(tdCheck);
+
+    // Name cell (spans remaining cols)
+    const tdName = document.createElement('td');
+    tdName.colSpan = 8;
+    tdName.className = 'pg-cell-header-name';
+    tdName.setAttribute('contenteditable', 'true');
+    tdName.textContent = getDisplayName(hItem);
+    tdName.addEventListener('blur', () => {
+      const newVal = tdName.textContent.trim();
+      if (newVal !== getDisplayName(hItem)) {
+        hItem.displayName = newVal || 'Section';
+        emitChange();
+      }
+    });
+    tdName.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); tdName.blur(); }
+      if (e.key === 'Escape') { tdName.textContent = getDisplayName(hItem); tdName.blur(); }
+    });
+    tr.appendChild(tdName);
+
+    // Actions
+    const tdAct = document.createElement('td');
+    tdAct.className = 'pg-cell-actions';
+    appendMoveButtons(tdAct, hItem);
+    tr.appendChild(tdAct);
+
+    if (selectedRows.has(hItem.id)) tr.classList.add('selected-row');
+    return tr;
   }
 
   function createItemRow(pItem, rowIndex) {
@@ -361,10 +695,26 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     tr.className = 'item-row';
     tr.dataset.itemId = pItem.id;
     tr.dataset.rowIndex = rowIndex;
+    tr.draggable = true;
+    tr.addEventListener('dragstart', (e) => handleDragStart(e, pItem));
+    tr.addEventListener('dragover', handleDragOver);
+    tr.addEventListener('dragleave', handleDragLeave);
+    tr.addEventListener('drop', (e) => handleDrop(e, pItem));
+    tr.addEventListener('dragend', handleDragEnd);
+    tr.addEventListener('contextmenu', (e) => showContextMenu(e, pItem));
 
     const changed = hasSourceChanged(pItem);
     if (changed) tr.classList.add('changed-row');
     if (selectedRows.has(pItem.id)) tr.classList.add('selected-row');
+
+    // Drag handle
+    const tdDrag = document.createElement('td');
+    tdDrag.className = 'pg-col-drag';
+    const grip = document.createElement('span');
+    grip.className = 'pg-drag-handle';
+    grip.innerHTML = ICONS.grip;
+    tdDrag.appendChild(grip);
+    tr.appendChild(tdDrag);
 
     // Checkbox
     const tdCheck = document.createElement('td');
@@ -372,12 +722,9 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = selectedRows.has(pItem.id);
-    cb.addEventListener('change', () => {
-      if (cb.checked) selectedRows.add(pItem.id);
-      else selectedRows.delete(pItem.id);
-      render();
+    cb.addEventListener('click', (e) => {
+      handleRowCheckbox(pItem.id, cb.checked, e.shiftKey);
     });
-    tdCheck.appendChild(cb);
     if (changed) {
       const dot = document.createElement('span');
       dot.className = 'changed-indicator';
@@ -386,44 +733,64 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     }
     tr.appendChild(tdCheck);
 
-    // Display Name (editable)
+    // Display Name (editable) + merge badge
     const tdName = createEditableCell(pItem, 'displayName', getDisplayName(pItem), rowIndex, 0);
+    if (pItem._mergedNames && pItem._mergedNames.length > 1) {
+      const badge = document.createElement('span');
+      badge.className = 'pg-merged-badge';
+      const expanded = expandedMerges.has(pItem.id);
+      badge.innerHTML = (expanded ? ICONS.chevronDown : ICONS.chevronRight) +
+        '<span>' + pItem._mergedNames.length + ' items merged</span>';
+      badge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (expandedMerges.has(pItem.id)) expandedMerges.delete(pItem.id);
+        else expandedMerges.add(pItem.id);
+        render();
+      });
+      tdName.appendChild(badge);
+
+      // Unmerge button
+      const unmerge = document.createElement('button');
+      unmerge.className = 'pg-unmerge-btn';
+      unmerge.textContent = 'Unmerge';
+      unmerge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        unmergeItem(pItem);
+      });
+      tdName.appendChild(unmerge);
+    }
     tr.appendChild(tdName);
 
-    // SKU (read-only)
+    // SKU
     const tdSku = document.createElement('td');
     tdSku.className = 'pg-cell-sku';
     tdSku.textContent = getDisplaySku(pItem);
     tr.appendChild(tdSku);
 
-    // Qty (editable number)
-    const tdQty = createEditableCell(pItem, 'displayQty', String(getDisplayQty(pItem)), rowIndex, 2, 'number');
-    tr.appendChild(tdQty);
+    // Qty
+    tr.appendChild(createEditableCell(pItem, 'displayQty', String(getDisplayQty(pItem)), rowIndex, 2, 'number'));
 
-    // Unit Price (editable number)
-    const tdPrice = createEditableCell(pItem, 'displayPrice', getDisplayPrice(pItem).toFixed(2), rowIndex, 3, 'number');
-    tr.appendChild(tdPrice);
+    // Unit Price
+    tr.appendChild(createEditableCell(pItem, 'displayPrice', getDisplayPrice(pItem).toFixed(2), rowIndex, 3, 'number'));
 
-    // Margin % (editable number)
-    const tdMargin = createEditableCell(pItem, 'displayMargin', getDisplayMargin(pItem).toFixed(1), rowIndex, 4, 'number');
-    tr.appendChild(tdMargin);
+    // Margin %
+    tr.appendChild(createEditableCell(pItem, 'displayMargin', getDisplayMargin(pItem).toFixed(1), rowIndex, 4, 'number'));
 
-    // Total (calculated, read-only)
+    // Total
     const tdTotal = document.createElement('td');
     tdTotal.className = 'pg-cell-total';
     tdTotal.textContent = currency(calcTotal(pItem));
     tr.appendChild(tdTotal);
 
-    // Monthly (calculated, read-only)
+    // Monthly
     const tdMonthly = document.createElement('td');
     tdMonthly.className = 'pg-cell-monthly';
     const monthly = calcMonthly(pItem);
     tdMonthly.textContent = monthly > 0 ? currency(monthly) : '';
     tr.appendChild(tdMonthly);
 
-    // Notes (editable)
-    const tdNotes = createEditableCell(pItem, 'note', pItem.note || '', rowIndex, 7);
-    tr.appendChild(tdNotes);
+    // Notes
+    tr.appendChild(createEditableCell(pItem, 'note', pItem.note || '', rowIndex, 7));
 
     // Actions
     const tdAct = document.createElement('td');
@@ -434,54 +801,109 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     return tr;
   }
 
+  function createSubtotalRow(section) {
+    const subTr = document.createElement('tr');
+    subTr.className = 'subtotal-row';
+
+    // drag + check + label
+    subTr.appendChild(document.createElement('td')); // drag
+    subTr.appendChild(document.createElement('td')); // check
+    const subLabel = document.createElement('td');
+    subLabel.textContent = 'Subtotal';
+    subLabel.style.cssText = 'text-align:right;font-weight:600;font-size:0.78rem;color:var(--text-secondary);font-style:italic;';
+    subTr.appendChild(subLabel);
+    // sku, qty, price, margin
+    for (let i = 0; i < 4; i++) subTr.appendChild(document.createElement('td'));
+
+    const subTotal = document.createElement('td');
+    subTotal.className = 'pg-cell-total';
+    subTotal.textContent = currency(section.items.reduce((s, i) => s + calcTotal(i), 0));
+    subTotal.style.fontWeight = '600';
+    subTr.appendChild(subTotal);
+
+    const subMonthly = document.createElement('td');
+    subMonthly.className = 'pg-cell-monthly';
+    const sectionMonthly = section.items.reduce((s, i) => s + calcMonthly(i), 0);
+    subMonthly.textContent = sectionMonthly > 0 ? currency(sectionMonthly) : '';
+    subTr.appendChild(subMonthly);
+
+    // notes + actions
+    subTr.appendChild(document.createElement('td'));
+    subTr.appendChild(document.createElement('td'));
+
+    return subTr;
+  }
+
+  function createGrandTotalRow(allVisibleItems) {
+    const grandTr = document.createElement('tr');
+    grandTr.className = 'grand-total-row';
+
+    grandTr.appendChild(document.createElement('td')); // drag
+    grandTr.appendChild(document.createElement('td')); // check
+    const gtLabel = document.createElement('td');
+    gtLabel.textContent = 'Grand Total';
+    gtLabel.style.cssText = 'text-align:right;font-weight:700;font-size:0.9rem;';
+    grandTr.appendChild(gtLabel);
+    // sku, qty, price, margin
+    for (let i = 0; i < 4; i++) grandTr.appendChild(document.createElement('td'));
+
+    const gtTotal = document.createElement('td');
+    gtTotal.className = 'pg-cell-total';
+    gtTotal.style.fontWeight = '700';
+    gtTotal.textContent = currency(allVisibleItems.reduce((s, i) => s + calcTotal(i), 0));
+    grandTr.appendChild(gtTotal);
+
+    const gtMonthly = document.createElement('td');
+    gtMonthly.className = 'pg-cell-monthly';
+    gtMonthly.style.fontWeight = '700';
+    const totalMonthly = allVisibleItems.reduce((s, i) => s + calcMonthly(i), 0);
+    gtMonthly.textContent = totalMonthly > 0 ? currency(totalMonthly) : '';
+    grandTr.appendChild(gtMonthly);
+
+    // notes + actions
+    grandTr.appendChild(document.createElement('td'));
+    grandTr.appendChild(document.createElement('td'));
+
+    return grandTr;
+  }
+
   function createHiddenRow(pItem) {
     const tr = document.createElement('tr');
     tr.className = 'hidden-row';
     tr.dataset.itemId = pItem.id;
 
-    // Checkbox
-    const tdCheck = document.createElement('td');
-    tr.appendChild(tdCheck);
+    tr.appendChild(document.createElement('td')); // drag
+    tr.appendChild(document.createElement('td')); // check
 
-    // Name
     const tdName = document.createElement('td');
     tdName.textContent = getDisplayName(pItem);
     tr.appendChild(tdName);
 
-    // SKU
     const tdSku = document.createElement('td');
     tdSku.textContent = getDisplaySku(pItem);
     tr.appendChild(tdSku);
 
-    // Qty
     const tdQty = document.createElement('td');
     tdQty.textContent = getDisplayQty(pItem);
     tr.appendChild(tdQty);
 
-    // Price
     const tdPrice = document.createElement('td');
     tdPrice.textContent = currency(getDisplayPrice(pItem));
     tr.appendChild(tdPrice);
 
-    // Margin
     const tdMargin = document.createElement('td');
     tdMargin.textContent = getDisplayMargin(pItem).toFixed(1) + '%';
     tr.appendChild(tdMargin);
 
-    // Total
     const tdTotal = document.createElement('td');
     tdTotal.textContent = currency(calcTotal(pItem));
     tr.appendChild(tdTotal);
 
-    // Monthly
     const tdMonthly = document.createElement('td');
     tr.appendChild(tdMonthly);
 
-    // Notes
-    const tdNotes = document.createElement('td');
-    tr.appendChild(tdNotes);
+    tr.appendChild(document.createElement('td')); // notes
 
-    // Restore button
     const tdAct = document.createElement('td');
     const restoreBtn = document.createElement('button');
     restoreBtn.className = 'btn btn-ghost btn-sm';
@@ -507,52 +929,67 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     td.setAttribute('data-col', colIndex);
     td.textContent = displayValue;
 
-    // For header rows, only displayName is editable
     if (pItem.type === 'header' && field !== 'displayName') {
       td.removeAttribute('contenteditable');
+      td.classList.remove('pg-cell-editable');
       return td;
     }
 
-    td.addEventListener('focus', () => {
-      editingCell = { row: rowIndex, col: colIndex };
-      editOriginalValue = td.textContent;
-      td.classList.add('editing');
+    // Click to focus (enter navigation mode on cell)
+    td.addEventListener('mousedown', (e) => {
+      if (editingCell && editingCell.row === rowIndex && editingCell.col === colIndex) return;
+      // If not already editing this cell, just focus it
+      if (!editingCell || editingCell.row !== rowIndex || editingCell.col !== colIndex) {
+        e.preventDefault();
+        focusCell(rowIndex, colIndex);
+      }
+    });
+
+    // Double-click to enter edit mode
+    td.addEventListener('dblclick', () => {
+      enterEditMode(rowIndex, colIndex);
     });
 
     td.addEventListener('blur', () => {
-      td.classList.remove('editing');
-      const newVal = td.textContent.trim();
-      commitEdit(pItem, field, newVal, type);
-      editingCell = null;
+      td.classList.remove('pg-cell-editing', 'pg-cell-focused');
+      if (editingCell && editingCell.row === rowIndex && editingCell.col === colIndex) {
+        const newVal = td.textContent.trim();
+        commitEdit(pItem, field, newVal, type);
+        editingCell = null;
+      }
     });
 
     td.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        td.blur();
-        // Move down
-        const nextRow = el.querySelector(`[data-row="${rowIndex + 1}"][data-col="${colIndex}"]`);
-        if (nextRow) nextRow.focus();
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        td.textContent = editOriginalValue;
-        td.blur();
-      }
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        td.blur();
-        const nextCol = nextEditableCol(colIndex, e.shiftKey ? -1 : 1);
-        if (nextCol != null) {
-          const nextCell = el.querySelector(`[data-row="${rowIndex}"][data-col="${nextCol}"]`);
-          if (nextCell) nextCell.focus();
-        } else {
-          // Jump to next/prev row
-          const targetRow = e.shiftKey ? rowIndex - 1 : rowIndex + 1;
-          const targetCol = e.shiftKey ? EDITABLE_COLS[EDITABLE_COLS.length - 1] : EDITABLE_COLS[0];
-          const nextCell = el.querySelector(`[data-row="${targetRow}"][data-col="${targetCol}"]`);
-          if (nextCell) nextCell.focus();
+      if (editingCell && editingCell.row === rowIndex && editingCell.col === colIndex) {
+        // In edit mode
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const prev = exitEditMode(true);
+          // Commit happens in blur
+          // Move down
+          if (prev) {
+            setTimeout(() => focusCell(prev.row + 1, prev.col), 0);
+          }
         }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          td.textContent = editOriginalValue;
+          exitEditMode(false);
+          focusCell(rowIndex, colIndex);
+        }
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          exitEditMode(true);
+          const nextCol = nextEditableCol(colIndex, e.shiftKey ? -1 : 1);
+          if (nextCol != null) {
+            setTimeout(() => focusCell(rowIndex, nextCol), 0);
+          } else {
+            const targetRow = e.shiftKey ? rowIndex - 1 : rowIndex + 1;
+            const targetCol = e.shiftKey ? EDITABLE_COLS[EDITABLE_COLS.length - 1] : EDITABLE_COLS[0];
+            setTimeout(() => focusCell(targetRow, targetCol), 0);
+          }
+        }
+        return; // Don't process arrow keys in edit mode
       }
     });
 
@@ -572,9 +1009,8 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     } else if (type === 'number') {
       const num = parseFloat(newVal);
       if (isNaN(num)) {
-        pItem[field] = null; // reset to source
+        pItem[field] = null;
       } else {
-        // Check if same as source
         const src = getSourceItem(pItem);
         if (field === 'displayQty') {
           const srcVal = src ? src.amount : 0;
@@ -593,48 +1029,79 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
   }
 
   function handleTableKeydown(e) {
-    // Arrow key navigation only when not editing a cell
+    // If in edit mode, the cell's own keydown handler deals with it
     if (editingCell) return;
-    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
 
-    e.preventDefault();
-    const active = document.activeElement;
-    if (!active || !active.dataset.row) return;
+    // Arrow keys: navigate
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+      if (!focusedCell) {
+        focusCell(0, EDITABLE_COLS[0]);
+        return;
+      }
 
-    const row = parseInt(active.dataset.row);
-    const col = parseInt(active.dataset.col);
+      let { row, col } = focusedCell;
+      if (e.key === 'ArrowUp') row--;
+      if (e.key === 'ArrowDown') row++;
+      if (e.key === 'ArrowLeft') {
+        const prev = nextEditableCol(col, -1);
+        if (prev != null) col = prev;
+      }
+      if (e.key === 'ArrowRight') {
+        const next = nextEditableCol(col, 1);
+        if (next != null) col = next;
+      }
 
-    let targetRow = row;
-    let targetCol = col;
-
-    if (e.key === 'ArrowUp') targetRow = row - 1;
-    if (e.key === 'ArrowDown') targetRow = row + 1;
-    if (e.key === 'ArrowLeft') {
-      const prev = nextEditableCol(col, -1);
-      if (prev != null) targetCol = prev;
+      // Check cell exists
+      const nextCell = el.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+      if (nextCell) focusCell(row, col);
+      return;
     }
-    if (e.key === 'ArrowRight') {
-      const next = nextEditableCol(col, 1);
-      if (next != null) targetCol = next;
+
+    // Enter: start editing focused cell
+    if (e.key === 'Enter' && focusedCell) {
+      e.preventDefault();
+      enterEditMode(focusedCell.row, focusedCell.col);
+      return;
     }
 
-    const nextCell = el.querySelector(`[data-row="${targetRow}"][data-col="${targetCol}"]`);
-    if (nextCell) nextCell.focus();
+    // Tab navigation
+    if (e.key === 'Tab' && focusedCell) {
+      e.preventDefault();
+      const { row, col } = focusedCell;
+      const nextCol = nextEditableCol(col, e.shiftKey ? -1 : 1);
+      if (nextCol != null) {
+        focusCell(row, nextCol);
+      } else {
+        const targetRow = e.shiftKey ? row - 1 : row + 1;
+        const targetCol = e.shiftKey ? EDITABLE_COLS[EDITABLE_COLS.length - 1] : EDITABLE_COLS[0];
+        const nextCell = el.querySelector(`[data-row="${targetRow}"][data-col="${targetCol}"]`);
+        if (nextCell) focusCell(targetRow, targetCol);
+      }
+      return;
+    }
+
+    // Escape: clear focus
+    if (e.key === 'Escape') {
+      const prev = el.querySelector('.pg-cell-focused');
+      if (prev) prev.classList.remove('pg-cell-focused');
+      focusedCell = null;
+    }
   }
 
   function appendMoveButtons(container, pItem) {
     const upBtn = document.createElement('button');
-    upBtn.className = 'btn btn-ghost btn-sm pg-move-btn';
-    upBtn.innerHTML = '&#9650;';
+    upBtn.className = 'pg-move-btn';
+    upBtn.innerHTML = ICONS.arrowUp;
     upBtn.title = 'Move up';
-    upBtn.addEventListener('click', () => moveItem(pItem, -1));
+    upBtn.addEventListener('click', (e) => { e.stopPropagation(); moveItem(pItem, -1); });
     container.appendChild(upBtn);
 
     const downBtn = document.createElement('button');
-    downBtn.className = 'btn btn-ghost btn-sm pg-move-btn';
-    downBtn.innerHTML = '&#9660;';
+    downBtn.className = 'pg-move-btn';
+    downBtn.innerHTML = ICONS.arrowDown;
     downBtn.title = 'Move down';
-    downBtn.addEventListener('click', () => moveItem(pItem, 1));
+    downBtn.addEventListener('click', (e) => { e.stopPropagation(); moveItem(pItem, 1); });
     container.appendChild(downBtn);
   }
 
@@ -642,17 +1109,46 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     const visible = getVisibleItems();
     const idx = visible.findIndex(i => i.id === pItem.id);
     if (idx < 0) return;
-
     const swapIdx = idx + direction;
     if (swapIdx < 0 || swapIdx >= visible.length) return;
-
-    // Swap order values
     const tmpOrder = visible[idx].order;
     visible[idx].order = visible[swapIdx].order;
     visible[swapIdx].order = tmpOrder;
-
     emitChange();
     render();
+  }
+
+  // --- Unmerge ---
+
+  function unmergeItem(pItem) {
+    if (!pItem._mergedNames || !pItem.sourceIndices || pItem.sourceIndices.length < 2) return;
+
+    // Recreate individual items from source indices
+    const baseOrder = pItem.order;
+    const newItems = pItem.sourceIndices.map((srcIdx, i) => {
+      const src = state.lineItems[srcIdx];
+      return {
+        id: generateId(),
+        sourceIndices: [srcIdx],
+        type: 'item',
+        displayName: null,
+        displayPrice: null,
+        displayQty: null,
+        displayMargin: null,
+        note: '',
+        hidden: false,
+        order: baseOrder + i * 0.1,
+        _sourceSnapshot: src ? [{ name: src.name, price: src.price, amount: src.amount, margin: src.margin, sla: src.sla }] : undefined,
+      };
+    });
+
+    state.items = state.items.filter(i => i.id !== pItem.id);
+    state.items.push(...newItems);
+    expandedMerges.delete(pItem.id);
+    reindex();
+    emitChange();
+    render();
+    showToast('Items unmerged', 'success');
   }
 
   // --- Public methods ---
@@ -688,13 +1184,14 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
   function mergeSelected() {
     const selIds = [...selectedRows];
     const selItems = state.items.filter(i => selIds.includes(i.id) && i.type === 'item' && !i.hidden);
-    if (selItems.length < 2) return;
+    if (selItems.length < 2) {
+      showToast('Select at least 2 items to merge', 'warning');
+      return;
+    }
 
-    // Combine source indices
     const combinedSourceIndices = [];
     selItems.forEach(i => combinedSourceIndices.push(...(i.sourceIndices || [])));
 
-    // Create merged item
     const merged = {
       id: generateId(),
       sourceIndices: [...new Set(combinedSourceIndices)],
@@ -705,47 +1202,100 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
       displayMargin: null,
       note: selItems.map(i => i.note).filter(Boolean).join('; '),
       hidden: false,
-      order: Math.min(...selItems.map(i => i.order))
+      order: Math.min(...selItems.map(i => i.order)),
+      _mergedNames: selItems.map(i => getDisplayName(i)),
     };
 
-    // Calculate combined price (weighted average unit price)
     const totalValue = selItems.reduce((s, i) => s + getDisplayPrice(i) * getDisplayQty(i), 0);
     const totalQty = merged.displayQty || 1;
     merged.displayPrice = totalValue / totalQty;
+    merged.displayMargin = selItems.reduce((s, i) => s + getDisplayMargin(i), 0) / selItems.length;
 
-    // Average margin
-    const avgMargin = selItems.reduce((s, i) => s + getDisplayMargin(i), 0) / selItems.length;
-    merged.displayMargin = avgMargin;
-
-    // Remove old items, add merged
     state.items = state.items.filter(i => !selIds.includes(i.id));
     state.items.push(merged);
     selectedRows.clear();
     reindex();
     emitChange();
+    emitSelectionChange();
     render();
+    showToast(selItems.length + ' items merged', 'success');
+  }
+
+  function groupSelected() {
+    const selIds = [...selectedRows];
+    const selItems = state.items
+      .filter(i => selIds.includes(i.id) && !i.hidden)
+      .sort((a, b) => a.order - b.order);
+    if (selItems.length < 2) {
+      showToast('Select at least 2 items to group', 'warning');
+      return;
+    }
+
+    const groupName = prompt('Enter group name:');
+    if (!groupName) return;
+
+    // Insert header above the first selected item
+    const firstOrder = selItems[0].order;
+    const header = {
+      id: generateId(),
+      sourceIndices: [],
+      type: 'header',
+      displayName: groupName,
+      displayPrice: null,
+      displayQty: null,
+      displayMargin: null,
+      note: '',
+      hidden: false,
+      order: firstOrder - 0.5
+    };
+    state.items.push(header);
+
+    // Move selected items to be contiguous after the header
+    selItems.forEach((item, idx) => {
+      item.order = firstOrder + idx * 0.1;
+    });
+
+    selectedRows.clear();
+    reindex();
+    emitChange();
+    emitSelectionChange();
+    render();
+    showToast('Items grouped under "' + groupName + '"', 'success');
   }
 
   function deleteSelected() {
-    selectedRows.forEach(id => {
+    const count = selectedRows.size;
+    if (count === 0) return;
+
+    const deletedIds = [...selectedRows];
+    deletedIds.forEach(id => {
       const item = state.items.find(i => i.id === id);
       if (item) item.hidden = true;
     });
     selectedRows.clear();
     emitChange();
+    emitSelectionChange();
     render();
+    showToast(count + ' row(s) deleted', 'info');
+  }
+
+  function duplicateSelected() {
+    if (selectedRows.size === 0) return;
+    const selId = [...selectedRows][0]; // duplicate first selected
+    const pItem = state.items.find(i => i.id === selId);
+    if (pItem) duplicateItem(pItem);
   }
 
   function resetToSource() {
-    // Rebuild presentation items from lineItems
     state.items = buildItemsFromSource(state.lineItems);
     selectedRows.clear();
+    expandedMerges.clear();
     emitChange();
+    emitSelectionChange();
     render();
   }
 
   function reindex() {
-    // Re-assign integer order values
     const sorted = [...state.items].sort((a, b) => a.order - b.order);
     sorted.forEach((item, i) => { item.order = i; });
   }
@@ -758,12 +1308,31 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     return [...selectedRows];
   }
 
+  function clearSelection() {
+    selectedRows.clear();
+    lastClickedRow = null;
+    emitSelectionChange();
+    render();
+  }
+
   function update(props) {
     if (props.items !== undefined) state.items = props.items;
     if (props.lineItems !== undefined) state.lineItems = props.lineItems;
     if (props.licenses !== undefined) state.licenses = props.licenses;
     if (props.onChange !== undefined) state.onChange = props.onChange;
     render();
+  }
+
+  function setOnSelectionChange(fn) {
+    onSelectionChange = fn;
+  }
+
+  // --- Utility ---
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
   }
 
   render();
@@ -775,9 +1344,13 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     getSelectedIds,
     addHeader,
     mergeSelected,
+    groupSelected,
     deleteSelected,
+    duplicateSelected,
+    clearSelection,
     resetToSource,
-    render
+    render,
+    setOnSelectionChange,
   };
 }
 
@@ -808,7 +1381,6 @@ export function buildItemsFromSource(lineItems) {
 
 /**
  * Detect changes between current lineItems and saved presentation snapshots.
- * Returns true if any source items changed.
  */
 export function detectSourceChanges(presentationItems, lineItems) {
   let hasChanges = false;
