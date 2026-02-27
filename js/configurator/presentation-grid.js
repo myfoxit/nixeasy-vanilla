@@ -885,8 +885,34 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     tr.appendChild(tdCheck);
 
     // Display Name (editable) + merge badge
-    const tdName = createEditableCell(pItem, 'displayName', getDisplayName(pItem), rowIndex, 0);
-    if (pItem._mergedNames && pItem._mergedNames.length > 1) {
+    const isMerged = pItem._mergedNames && pItem._mergedNames.length > 1;
+
+    if (isMerged) {
+      // For merged items: don't use contenteditable on the whole cell
+      // Instead, use a wrapper with a name span + badge
+      const tdName = document.createElement('td');
+      tdName.className = 'pg-cell-editable pg-col-0';
+      tdName.setAttribute('data-row', rowIndex);
+      tdName.setAttribute('data-col', 0);
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'pg-merged-name';
+      nameSpan.setAttribute('contenteditable', 'true');
+      nameSpan.textContent = getDisplayName(pItem);
+      nameSpan.addEventListener('blur', () => {
+        const newVal = nameSpan.textContent.trim();
+        if (newVal !== getDisplayName(pItem)) {
+          pItem.displayName = newVal || pItem._mergedNames.join(' + ');
+          emitChange();
+        }
+      });
+      nameSpan.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); nameSpan.blur(); }
+        if (e.key === 'Escape') { nameSpan.textContent = getDisplayName(pItem); nameSpan.blur(); }
+      });
+      tdName.appendChild(nameSpan);
+
+      // Merge badge
       const badge = document.createElement('span');
       badge.className = 'pg-merged-badge';
       const expanded = expandedMerges.has(pItem.id);
@@ -909,8 +935,12 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
         unmergeItem(pItem);
       });
       tdName.appendChild(unmerge);
+
+      tr.appendChild(tdName);
+    } else {
+      const tdName = createEditableCell(pItem, 'displayName', getDisplayName(pItem), rowIndex, 0);
+      tr.appendChild(tdName);
     }
-    tr.appendChild(tdName);
 
     // SKU
     const tdSku = document.createElement('td');

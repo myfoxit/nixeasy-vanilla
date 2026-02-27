@@ -1413,6 +1413,18 @@
   border-left: 2px solid var(--primary);
 }
 
+/* Merged item name span */
+.pg-merged-name {
+  outline: none;
+  border-bottom: 1px dashed rgba(0,0,0,0.08);
+  padding: 1px 2px;
+  border-radius: 2px;
+}
+.pg-merged-name:focus {
+  border-bottom-color: var(--primary);
+  background: rgba(79, 70, 229, 0.04);
+}
+
 /* Item row hover */
 .presentation-grid .item-row:hover td {
   background: #f0f7ff;
