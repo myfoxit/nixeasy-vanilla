@@ -271,8 +271,26 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     const menuItems = [];
 
     if (pItem.type === 'item') {
-      menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Header Above', action: () => addHeaderAt(pItem, 'above') });
-      menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Header Below', action: () => addHeaderAt(pItem, 'below') });
+      menuItems.push({ icon: ICONS.headerInsert, label: 'Add Group Above', action: () => addGroupAt(pItem, 'above') });
+      menuItems.push({ icon: ICONS.headerInsert, label: 'Add Group Below', action: () => addGroupAt(pItem, 'below') });
+      // Move to group
+      const headers = state.items.filter(i => i.type === 'header' && !i.hidden);
+      if (headers.length > 0) {
+        const groupMenu = [];
+        if (pItem.groupId) {
+          groupMenu.push({ icon: ICONS.moveTop, label: 'Remove from Group', action: () => { delete pItem.groupId; reindex(); emitChange(); render(); } });
+        }
+        headers.forEach(h => {
+          if (h.id !== pItem.groupId) {
+            groupMenu.push({ icon: ICONS.headerInsert, label: `Move to "${getDisplayName(h)}"`, action: () => { pItem.groupId = h.id; reindex(); emitChange(); render(); } });
+          }
+        });
+        if (groupMenu.length > 0) {
+          menuItems.push('sep');
+          groupMenu.forEach(m => menuItems.push(m));
+        }
+      }
+      menuItems.push('sep');
       menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Empty Row Above', action: () => addEmptyRowAt(pItem, 'above') });
       menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Empty Row Below', action: () => addEmptyRowAt(pItem, 'below') });
       menuItems.push({ icon: ICONS.duplicate, label: 'Duplicate Row', action: () => duplicateItem(pItem) });
@@ -292,8 +310,8 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     } else if (pItem.type === 'header') {
       menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Empty Row Above', action: () => addEmptyRowAt(pItem, 'above') });
       menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Empty Row Below', action: () => addEmptyRowAt(pItem, 'below') });
-      menuItems.push({ icon: ICONS.duplicate, label: 'Duplicate Header', action: () => duplicateItem(pItem) });
-      menuItems.push({ icon: ICONS.trash, label: 'Delete Header', action: () => deleteItemWithUndo(pItem), danger: true });
+      menuItems.push({ icon: ICONS.duplicate, label: 'Duplicate Group', action: () => duplicateItem(pItem) });
+      menuItems.push({ icon: ICONS.trash, label: 'Delete Group', action: () => deleteItemWithUndo(pItem), danger: true });
       menuItems.push('sep');
       menuItems.push({ icon: ICONS.moveTop, label: 'Move to Top', action: () => moveToEdge(pItem, 'top') });
       menuItems.push({ icon: ICONS.moveBottom, label: 'Move to Bottom', action: () => moveToEdge(pItem, 'bottom') });
@@ -354,33 +372,52 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
 
   // --- Context Menu Actions ---
 
-  function addHeaderAt(pItem, position) {
+  function addGroupAt(pItem, position) {
     const visible = getVisibleItems();
     const idx = visible.findIndex(i => i.id === pItem.id);
-    let order;
+
+    let headerOrder;
     if (position === 'above') {
-      order = idx > 0 ? (visible[idx - 1].order + pItem.order) / 2 : pItem.order - 0.5;
+      // Header above this item — this item joins the group
+      headerOrder = idx > 0 ? (visible[idx - 1].order + pItem.order) / 2 : pItem.order - 0.5;
     } else {
-      order = idx < visible.length - 1 ? (pItem.order + visible[idx + 1].order) / 2 : pItem.order + 0.5;
+      // Header below this item — next item(s) join the group
+      headerOrder = idx < visible.length - 1
+        ? (pItem.order + visible[idx + 1].order) / 2
+        : pItem.order + 0.5;
     }
 
     const header = {
       id: generateId(),
       sourceIndices: [],
       type: 'header',
-      displayName: 'New Section',
+      displayName: 'New Group',
       displayPrice: null,
       displayQty: null,
       displayMargin: null,
       note: '',
       hidden: false,
-      order
+      order: headerOrder
     };
     state.items.push(header);
+
+    if (position === 'above') {
+      // This item belongs to the new group
+      pItem.groupId = header.id;
+    } else {
+      // Items below belong to the new group (assign next item if exists)
+      if (idx < visible.length - 1 && visible[idx + 1].type === 'item') {
+        visible[idx + 1].groupId = header.id;
+      }
+    }
+
     reindex();
     emitChange();
     render();
   }
+
+  // Keep old name as alias for toolbar "Add Header" button
+  function addHeaderAt(pItem, position) { addGroupAt(pItem, position); }
 
   function addEmptyRowAt(pItem, position) {
     const visible = getVisibleItems();
@@ -481,6 +518,7 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
       note: [itemA.note, itemB.note].filter(Boolean).join('; '),
       hidden: false,
       order: Math.min(itemA.order, itemB.order),
+      groupId: itemA.groupId || itemB.groupId || null,
       _mergedNames: [nameA, nameB],
     };
 
@@ -1402,6 +1440,7 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
         note: '',
         hidden: false,
         order: baseOrder + i * 0.1,
+        groupId: pItem.groupId || null,
         _sourceSnapshot: src ? [{ name: src.name, price: src.price, amount: src.amount, margin: src.margin, sla: src.sla }] : undefined,
       };
     });
@@ -1431,7 +1470,7 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
       id: generateId(),
       sourceIndices: [],
       type: 'header',
-      displayName: 'New Section',
+      displayName: 'New Group',
       displayPrice: null,
       displayQty: null,
       displayMargin: null,
