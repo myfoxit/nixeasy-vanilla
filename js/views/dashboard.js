@@ -161,10 +161,8 @@ export function createDashboardView(container) {
     // Render widgets sorted by position.order
     const sorted = [...widgets].sort((a, b) => (a.position?.order ?? 0) - (b.position?.order ?? 0));
     sorted.forEach(w => {
-      renderWidget(w, grid, {
-        onConfigure: widget => openConfig(widget, false),
-        globalTimeRange,
-      });
+      const { card, gearBtn } = renderWidget(w, grid, globalTimeRange);
+      gearBtn.addEventListener('click', () => openConfig(w, false));
     });
   }
 

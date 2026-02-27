@@ -1,10 +1,8 @@
 // Dashboard Widget Rendering
 // Fetches data, processes metrics, renders charts via Chart.js
 
-import { getApi } from '../api.js';
+import { pb } from '../api.js';
 import { COLOR_SCHEMES, STATUS_COLORS } from './dashboard-config.js';
-
-const pb = getApi();
 const dataCache = new Map();
 const CACHE_TTL = 60_000;
 const chartInstances = new Map();
