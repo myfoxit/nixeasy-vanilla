@@ -16,6 +16,7 @@ import { createMeasurePointTemplatesView } from './views/measure-point-templates
 import { createMeasurePointCalculatorView } from './views/measure-point-calculator.js';
 import { createInstalledBaseView } from './views/installed-base.js';
 import { createConfiguratorView } from './configurator/configurator.js';
+import { initCommandPalette } from './components/command-palette.js';
 
 // ---------------------------------------------------------------------------
 // Theme initialisation (before first paint)
@@ -84,6 +85,9 @@ function showAppShell() {
 
   // Init toast system
   initToasts();
+
+  // Init command palette (⌘K / Ctrl+K)
+  initCommandPalette();
 
   // Wrapper
   const wrapper = document.createElement('div');

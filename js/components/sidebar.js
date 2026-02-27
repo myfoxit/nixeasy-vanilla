@@ -313,6 +313,15 @@ export function createSidebar({ userEmail, onCollapsedChange }) {
   const nav = document.createElement('nav');
   nav.className = 'sidebar-nav';
 
+  // Search trigger (opens command palette)
+  const searchBtn = document.createElement('button');
+  searchBtn.className = 'sidebar-search-btn';
+  searchBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;flex-shrink:0;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><span>Search…</span><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'}K</kbd>`;
+  searchBtn.addEventListener('click', () => {
+    import('./command-palette.js').then(m => m.openCommandPalette());
+  });
+  nav.appendChild(searchBtn);
+
   /** Map of view key -> button element for active-state management */
   const navButtons = {};
 
