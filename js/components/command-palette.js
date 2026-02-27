@@ -75,6 +75,7 @@ async function ensureData() {
 // ─── Search ─────────────────────────────────────────────────
 
 function searchAll(query) {
+  try {
   const q = query.trim();
   if (!q) {
     const actions = getQuickActions('');
@@ -171,6 +172,10 @@ function searchAll(query) {
   }
 
   return grouped;
+  } catch (err) {
+    console.error('searchAll error:', err);
+    return [];
+  }
 }
 
 function getQuickActions(query) {
@@ -254,9 +259,14 @@ function open() {
 
   // Render immediately with whatever we have (actions always work)
   function doSearch() {
-    if (!overlay) return;
-    selectedIndex = 0;
-    renderResults(resultsEl, searchAll(input.value));
+    try {
+      if (!overlay) return;
+      selectedIndex = 0;
+      const groups = searchAll(input.value);
+      renderResults(resultsEl, Array.isArray(groups) ? groups : []);
+    } catch (err) {
+      console.error('doSearch error:', err);
+    }
   }
 
   doSearch();
@@ -331,12 +341,13 @@ function renderResults(container, groups) {
   }
 
   groups.forEach(group => {
+    if (!group || !Array.isArray(group.items)) return; // defensive
     const section = document.createElement('div');
     section.className = 'cmd-palette-section';
 
     const label = document.createElement('div');
     label.className = 'cmd-palette-section-label';
-    label.textContent = group.label;
+    label.textContent = group.label || '';
     section.appendChild(label);
 
     group.items.forEach(item => {
