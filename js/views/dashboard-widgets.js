@@ -30,9 +30,14 @@ export function clearCache() {
 // Data Fetchers
 // ==========================================================================
 function fetchOpportunities() {
-  return cachedFetch('opportunities', () =>
-    pb.collection('opportunities').getFullList({ expand: 'customer' })
-  );
+  return cachedFetch('opportunities', async () => {
+    try {
+      return await pb.collection('opportunities').getFullList({ expand: 'customer' });
+    } catch (e) {
+      console.warn('Failed to fetch opportunities with expand, trying without:', e.message);
+      return await pb.collection('opportunities').getFullList();
+    }
+  });
 }
 
 function fetchQuotes() {
@@ -42,9 +47,14 @@ function fetchQuotes() {
 }
 
 function fetchInstalledBase() {
-  return cachedFetch('installed_base', () =>
-    pb.collection('installed_base').getFullList({ expand: 'customer,license' })
-  );
+  return cachedFetch('installed_base', async () => {
+    try {
+      return await pb.collection('installed_base').getFullList({ expand: 'customer,license' });
+    } catch (e) {
+      console.warn('Failed to fetch installed_base with expand, trying without:', e.message);
+      return await pb.collection('installed_base').getFullList();
+    }
+  });
 }
 
 function fetchLicenses() {
