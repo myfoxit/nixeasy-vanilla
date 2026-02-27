@@ -52,6 +52,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     summary: { hk: 0, vk: 0, monthly: 0 }
   };
   let qId = quoteId;
+  let quoteName = '';
   let templates = [];
   let templateName = '';
   let templateDesc = '';
@@ -341,6 +342,16 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     }
   }
 
+  async function saveQuoteName() {
+    if (!qId) return;
+    try {
+      await pb.collection('quotes').update(qId, { name: quoteName });
+    } catch (err) {
+      // name field might not exist yet — ignore silently
+      console.warn('Could not save quote name:', err.message);
+    }
+  }
+
   async function saveAsTemplate(name, desc) {
     if (!name.trim()) {
       showToast('Please enter a template name', 'warning');
@@ -572,76 +583,61 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     titleH2.textContent = isTemplateMode ? 'Template Editor' : 'Quote Builder';
     headerLeft.appendChild(titleH2);
 
-    const subtitle = document.createElement('p');
-    subtitle.className = 'text-sm text-secondary';
-    subtitle.textContent = isTemplateMode ? (templateName || 'New Template') : 'Configure your quote.';
-    headerLeft.appendChild(subtitle);
+    // Editable quote name (non-template mode)
+    if (!isTemplateMode) {
+      const nameRow = document.createElement('div');
+      nameRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:2px;';
 
-    // Quote switcher (non-template mode only)
-    if (!isTemplateMode && oppId) {
-      const switcherRow = document.createElement('div');
-      switcherRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px;';
-
-      const switcherSelect = document.createElement('select');
-      switcherSelect.className = 'btn btn-secondary';
-      switcherSelect.style.cssText = 'padding:4px 8px;font-size:0.75rem;cursor:pointer;min-width:140px;';
-      switcherSelect.innerHTML = '<option value="">Loading quotes…</option>';
-
-      // Load sibling quotes
-      pb.collection('quotes').getFullList({
-        filter: `opportunity = "${oppId}"`,
-        sort: '-created',
-        requestKey: null,
-      }).then(siblings => {
-        switcherSelect.innerHTML = '';
-        siblings.forEach(sq => {
-          const opt = document.createElement('option');
-          opt.value = sq.id;
-          opt.textContent = sq.name || `Quote ${sq.id.slice(0, 6)}`;
-          if (sq.id === qId) opt.selected = true;
-          switcherSelect.appendChild(opt);
-        });
-        if (siblings.length <= 1) {
-          switcherSelect.style.display = 'none';
-        }
-      }).catch(() => {
-        switcherSelect.innerHTML = '<option>—</option>';
-      });
-
-      switcherSelect.addEventListener('change', () => {
-        if (switcherSelect.value && switcherSelect.value !== qId) {
-          navigate(`/opportunities/${oppId}/quotes/${switcherSelect.value}`);
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = quoteName;
+      nameInput.placeholder = 'Quote name…';
+      nameInput.style.cssText = 'border:none;border-bottom:1px solid transparent;background:transparent;font-size:0.82rem;color:var(--text-secondary);padding:2px 0;outline:none;min-width:120px;max-width:220px;transition:border-color 0.15s;';
+      nameInput.addEventListener('focus', () => { nameInput.style.borderBottomColor = 'var(--primary)'; });
+      nameInput.addEventListener('blur', () => {
+        nameInput.style.borderBottomColor = 'transparent';
+        const newName = nameInput.value.trim();
+        if (newName !== quoteName) {
+          quoteName = newName;
+          saveQuoteName();
         }
       });
-      switcherRow.appendChild(switcherSelect);
-
-      // Duplicate button
-      const dupBtn = document.createElement('button');
-      dupBtn.className = 'btn btn-secondary';
-      dupBtn.style.cssText = 'padding:4px 8px;font-size:0.75rem;';
-      dupBtn.title = 'Duplicate this quote';
-      dupBtn.textContent = '⧉ Duplicate';
-      dupBtn.addEventListener('click', async () => {
-        try {
-          await save(); // save current state first
-          const orig = await pb.collection('quotes').getOne(qId);
-          const newName = (orig.name || 'Untitled') + ' (copy)';
-          const body = {
-            opportunity: oppId,
-            name: newName,
-            quote_data: orig.quote_data,
-          };
-          if (!isSuperUser() && currentUser?.id) body.created_by = currentUser.id;
-          const dup = await pb.collection('quotes').create(body);
-          showToast(`Duplicated as "${newName}"`, 'success');
-          navigate(`/opportunities/${oppId}/quotes/${dup.id}`);
-        } catch (err) {
-          showToast('Failed to duplicate: ' + (err.message || 'Unknown error'), 'error');
-        }
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') nameInput.blur();
       });
-      switcherRow.appendChild(dupBtn);
+      nameRow.appendChild(nameInput);
 
-      headerLeft.appendChild(switcherRow);
+      // Sibling quotes tabs (loaded async)
+      const tabsWrap = document.createElement('div');
+      tabsWrap.style.cssText = 'display:flex;gap:4px;margin-left:8px;';
+      nameRow.appendChild(tabsWrap);
+
+      if (oppId) {
+        pb.collection('quotes').getFullList({
+          filter: `opportunity = "${oppId}"`,
+          sort: '-created',
+          requestKey: null,
+        }).then(siblings => {
+          if (siblings.length <= 1) return;
+          siblings.forEach(sq => {
+            const tab = document.createElement('button');
+            const isCurrent = sq.id === qId;
+            tab.style.cssText = `padding:2px 8px;font-size:0.7rem;border-radius:4px;border:1px solid ${isCurrent ? 'var(--primary)' : 'var(--border)'};background:${isCurrent ? 'var(--primary-light)' : 'transparent'};color:${isCurrent ? 'var(--primary)' : 'var(--text-secondary)'};cursor:pointer;font-weight:${isCurrent ? '600' : '400'};white-space:nowrap;`;
+            tab.textContent = sq.name || `Quote ${sq.id.slice(0, 6)}`;
+            if (!isCurrent) {
+              tab.addEventListener('click', () => navigate(`/opportunities/${oppId}/quotes/${sq.id}`));
+            }
+            tabsWrap.appendChild(tab);
+          });
+        }).catch(() => {});
+      }
+
+      headerLeft.appendChild(nameRow);
+    } else {
+      const subtitle = document.createElement('p');
+      subtitle.className = 'text-sm text-secondary';
+      subtitle.textContent = templateName || 'New Template';
+      headerLeft.appendChild(subtitle);
     }
 
     header.appendChild(headerLeft);
@@ -755,6 +751,38 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
         width: 320
       });
       headerRight.appendChild(savePopoverInstance.element);
+
+      // Duplicate Quote button
+      if (qId) {
+        const dupQuoteBtn = document.createElement('button');
+        dupQuoteBtn.className = 'btn btn-secondary';
+        dupQuoteBtn.textContent = 'Duplicate';
+        dupQuoteBtn.title = 'Save & duplicate this quote';
+        dupQuoteBtn.addEventListener('click', async () => {
+          try {
+            dupQuoteBtn.disabled = true;
+            dupQuoteBtn.textContent = 'Duplicating…';
+            await save();
+            const orig = await pb.collection('quotes').getOne(qId);
+            const newName = (orig.name || quoteName || 'Untitled') + ' (copy)';
+            const body = {
+              opportunity: oppId,
+              quote_data: orig.quote_data,
+            };
+            // Try setting name — field might not exist
+            try { body.name = newName; } catch (_) {}
+            if (!isSuperUser() && currentUser?.id) body.created_by = currentUser.id;
+            const dup = await pb.collection('quotes').create(body);
+            showToast(`Duplicated as "${newName}"`, 'success');
+            navigate(`/opportunities/${oppId}/quotes/${dup.id}`);
+          } catch (err) {
+            showToast('Failed to duplicate: ' + (err.message || 'Unknown error'), 'error');
+            dupQuoteBtn.disabled = false;
+            dupQuoteBtn.textContent = 'Duplicate';
+          }
+        });
+        headerRight.appendChild(dupQuoteBtn);
+      }
 
       // Save Quote button
       const saveQuoteBtn = document.createElement('button');
@@ -1197,6 +1225,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     if (quoteId) {
       try {
         const q = await pb.collection('quotes').getOne(quoteId);
+        quoteName = q.name || '';
         if (q.quote_data) {
           const data = q.quote_data;
           const loadedContainers = (data.containers || []).map(c => ({

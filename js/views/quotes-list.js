@@ -67,12 +67,47 @@ export function createQuotesListView(container) {
         header: 'Name',
         sortable: true,
         sortKey: 'name',
-        style: { width: 160 },
+        style: { width: 180 },
         render: (q) => {
-          const span = document.createElement('span');
-          span.style.fontWeight = '500';
-          span.textContent = q.name || 'Untitled';
-          return span;
+          const wrap = document.createElement('div');
+          wrap.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+          const nameSpan = document.createElement('span');
+          nameSpan.style.cssText = 'font-weight:500;cursor:text;padding:2px 4px;border-radius:4px;border:1px solid transparent;min-width:60px;';
+          nameSpan.textContent = q.name || 'Untitled';
+          nameSpan.title = 'Click to rename';
+          nameSpan.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = q.name || '';
+            input.placeholder = 'Quote name…';
+            input.style.cssText = 'font-size:inherit;font-weight:500;padding:2px 4px;border:1px solid var(--primary);border-radius:4px;outline:none;width:140px;background:var(--surface);';
+            nameSpan.replaceWith(input);
+            input.focus();
+            input.select();
+            const finish = async () => {
+              const newName = input.value.trim();
+              if (newName && newName !== q.name) {
+                try {
+                  await pb.collection('quotes').update(q.id, { name: newName });
+                  q.name = newName;
+                } catch (err) {
+                  showToast('Could not rename — add "name" field to quotes collection', 'warning');
+                }
+              }
+              input.replaceWith(nameSpan);
+              nameSpan.textContent = q.name || 'Untitled';
+            };
+            input.addEventListener('blur', finish);
+            input.addEventListener('keydown', (ev) => {
+              if (ev.key === 'Enter') input.blur();
+              if (ev.key === 'Escape') { input.value = q.name || ''; input.blur(); }
+            });
+          });
+
+          wrap.appendChild(nameSpan);
+          return wrap;
         },
       },
       {
@@ -264,23 +299,36 @@ export function createQuotesListView(container) {
   // --- Duplicate ---
   async function handleDuplicate(quote) {
     try {
-      const origName = quote.name || 'Untitled';
-      const newName = `${origName} (copy)`;
+      const oppId = quote.opportunity || quote.expand?.opportunity?.id;
+      if (!oppId) {
+        showToast('Cannot duplicate — no opportunity linked', 'error');
+        return;
+      }
       const body = {
-        opportunity: quote.opportunity || quote.expand?.opportunity?.id,
+        opportunity: oppId,
         quote_data: quote.quote_data,
-        name: newName,
       };
       if (!isSuperUser() && currentUser?.id) body.created_by = currentUser.id;
-      const dup = await pb.collection('quotes').create(body);
-      showToast(`Duplicated as "${newName}"`, 'success');
-      // Navigate to the new quote
-      const oppId = quote.opportunity || quote.expand?.opportunity?.id;
-      if (oppId) {
-        navigate(`/opportunities/${oppId}/quotes/${dup.id}`);
-      } else {
-        fetchQuotes();
+
+      // Try with name first, fall back without if field doesn't exist
+      const origName = quote.name || 'Untitled';
+      body.name = `${origName} (copy)`;
+
+      let dup;
+      try {
+        dup = await pb.collection('quotes').create(body);
+      } catch (err) {
+        // If name field doesn't exist, retry without it
+        if (err?.response?.data?.name) {
+          delete body.name;
+          dup = await pb.collection('quotes').create(body);
+        } else {
+          throw err;
+        }
       }
+
+      showToast(`Quote duplicated`, 'success');
+      navigate(`/opportunities/${oppId}/quotes/${dup.id}`);
     } catch (err) {
       showToast('Failed to duplicate: ' + (err.message || 'Unknown error'), 'error');
     }
