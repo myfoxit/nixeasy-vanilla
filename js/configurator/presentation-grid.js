@@ -273,6 +273,8 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     if (pItem.type === 'item') {
       menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Header Above', action: () => addHeaderAt(pItem, 'above') });
       menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Header Below', action: () => addHeaderAt(pItem, 'below') });
+      menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Empty Row Above', action: () => addEmptyRowAt(pItem, 'above') });
+      menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Empty Row Below', action: () => addEmptyRowAt(pItem, 'below') });
       menuItems.push({ icon: ICONS.duplicate, label: 'Duplicate Row', action: () => duplicateItem(pItem) });
       menuItems.push({ icon: ICONS.trash, label: 'Delete Row', action: () => deleteItemWithUndo(pItem), danger: true });
 
@@ -288,6 +290,8 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
       menuItems.push({ icon: ICONS.moveTop, label: 'Move to Top', action: () => moveToEdge(pItem, 'top') });
       menuItems.push({ icon: ICONS.moveBottom, label: 'Move to Bottom', action: () => moveToEdge(pItem, 'bottom') });
     } else if (pItem.type === 'header') {
+      menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Empty Row Above', action: () => addEmptyRowAt(pItem, 'above') });
+      menuItems.push({ icon: ICONS.headerInsert, label: 'Insert Empty Row Below', action: () => addEmptyRowAt(pItem, 'below') });
       menuItems.push({ icon: ICONS.duplicate, label: 'Duplicate Header', action: () => duplicateItem(pItem) });
       menuItems.push({ icon: ICONS.trash, label: 'Delete Header', action: () => deleteItemWithUndo(pItem), danger: true });
       menuItems.push('sep');
@@ -373,6 +377,39 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
       order
     };
     state.items.push(header);
+    reindex();
+    emitChange();
+    render();
+  }
+
+  function addEmptyRowAt(pItem, position) {
+    const visible = getVisibleItems();
+    const idx = visible.findIndex(i => i.id === pItem.id);
+    let order;
+    if (position === 'above') {
+      order = idx > 0 ? (visible[idx - 1].order + pItem.order) / 2 : pItem.order - 0.5;
+    } else {
+      order = idx < visible.length - 1 ? (pItem.order + visible[idx + 1].order) / 2 : pItem.order + 0.5;
+    }
+
+    const emptyRow = {
+      id: generateId(),
+      sourceIndices: [],
+      type: 'item',
+      displayName: '',
+      displayPrice: null,
+      displayQty: null,
+      displayMargin: null,
+      note: '',
+      hidden: false,
+      order,
+      groupId: pItem.groupId || null, // inherit group if inside one
+    };
+    // If inserting below a header, assign to that group
+    if (position === 'below' && pItem.type === 'header') {
+      emptyRow.groupId = pItem.id;
+    }
+    state.items.push(emptyRow);
     reindex();
     emitChange();
     render();
@@ -709,7 +746,7 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
 
     sections.forEach((section) => {
       if (section.header) {
-        const tr = createHeaderRow(section.header, rowIndex);
+        const tr = createHeaderRow(section.header, section.items, rowIndex);
         tbody.appendChild(tr);
         rowIndex++;
       }
@@ -720,7 +757,6 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
         const tr = createItemRow(pItem, rowIndex);
         if (section.header) {
           tr.classList.add('grouped-item');
-          // Hide if group is collapsed
           if (isCollapsed) tr.style.display = 'none';
         }
         tbody.appendChild(tr);
@@ -737,13 +773,6 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
           });
         }
       });
-
-      // Subtotal row
-      if (section.header && section.items.length > 0) {
-        const subTr = createSubtotalRow(section);
-        if (isCollapsed) subTr.style.display = 'none';
-        tbody.appendChild(subTr);
-      }
     });
 
     // Hidden (soft-deleted) items
@@ -759,13 +788,6 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
 
     table.appendChild(tbody);
 
-    // Update collapsed group count badges
-    sections.forEach(section => {
-      if (section.header && collapsedGroups.has(section.header.id)) {
-        const badge = table.querySelector(`.pg-group-count[data-header-id="${section.header.id}"]`);
-        if (badge) badge.textContent = `(${section.items.length} items)`;
-      }
-    });
     el.appendChild(table);
 
     // --- Event delegation on tbody ---
@@ -808,7 +830,7 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     }
   }
 
-  function createHeaderRow(hItem, rowIndex) {
+  function createHeaderRow(hItem, sectionItems, rowIndex) {
     const tr = document.createElement('tr');
     tr.className = 'header-row';
     tr.dataset.itemId = hItem.id;
@@ -836,18 +858,19 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     tdCheck.appendChild(cb);
     tr.appendChild(tdCheck);
 
-    // Name cell (spans remaining cols)
+    // Name cell — spans name + sku + qty + price + margin (5 cols)
     const tdName = document.createElement('td');
-    tdName.colSpan = 8;
+    tdName.colSpan = 5;
     tdName.className = 'pg-cell-header-name';
 
     // Collapse/expand chevron
     const chevron = document.createElement('span');
     chevron.className = 'pg-group-chevron';
-    chevron.innerHTML = collapsedGroups.has(hItem.id)
+    const isCollapsed = collapsedGroups.has(hItem.id);
+    chevron.innerHTML = isCollapsed
       ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>'
       : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
-    chevron.title = collapsedGroups.has(hItem.id) ? 'Expand group' : 'Collapse group';
+    chevron.title = isCollapsed ? 'Expand group' : 'Collapse group';
     chevron.style.cssText = 'cursor:pointer; display:inline-flex; align-items:center; margin-right:8px; color:var(--text-secondary); vertical-align:middle;';
     chevron.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -864,13 +887,12 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     const nameSpan = document.createElement('span');
     nameSpan.setAttribute('contenteditable', 'true');
     nameSpan.textContent = getDisplayName(hItem);
-    // Show item count when collapsed
-    if (collapsedGroups.has(hItem.id)) {
+
+    // Item count badge when collapsed
+    if (isCollapsed && sectionItems.length > 0) {
       const countBadge = document.createElement('span');
       countBadge.style.cssText = 'font-size:0.7rem; color:var(--text-secondary); font-weight:400; margin-left:8px;';
-      // We'll set the count after sections are computed — for now use a placeholder
-      countBadge.className = 'pg-group-count';
-      countBadge.dataset.headerId = hItem.id;
+      countBadge.textContent = `(${sectionItems.length} items)`;
       tdName.appendChild(countBadge);
     }
 
@@ -887,6 +909,28 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     });
     tdName.appendChild(nameSpan);
     tr.appendChild(tdName);
+
+    // Subtotal in Total column
+    const tdTotal = document.createElement('td');
+    tdTotal.className = 'pg-cell-total';
+    if (sectionItems.length > 0) {
+      tdTotal.textContent = currency(sectionItems.reduce((s, i) => s + calcTotal(i), 0));
+      tdTotal.style.fontWeight = '600';
+    }
+    tr.appendChild(tdTotal);
+
+    // Subtotal in Monthly column
+    const tdMonthly = document.createElement('td');
+    tdMonthly.className = 'pg-cell-monthly';
+    if (sectionItems.length > 0) {
+      const monthly = sectionItems.reduce((s, i) => s + calcMonthly(i), 0);
+      if (monthly > 0) tdMonthly.textContent = currency(monthly);
+      tdMonthly.style.fontWeight = '600';
+    }
+    tr.appendChild(tdMonthly);
+
+    // Notes (empty)
+    tr.appendChild(document.createElement('td'));
 
     // Actions
     const tdAct = document.createElement('td');
@@ -1033,39 +1077,6 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     tr.appendChild(tdAct);
 
     return tr;
-  }
-
-  function createSubtotalRow(section) {
-    const subTr = document.createElement('tr');
-    subTr.className = 'subtotal-row';
-
-    // drag + check + label
-    subTr.appendChild(document.createElement('td')); // drag
-    subTr.appendChild(document.createElement('td')); // check
-    const subLabel = document.createElement('td');
-    subLabel.textContent = 'Subtotal';
-    subLabel.style.cssText = 'text-align:right;font-weight:600;font-size:0.78rem;color:var(--text-secondary);font-style:italic;';
-    subTr.appendChild(subLabel);
-    // sku, qty, price, margin
-    for (let i = 0; i < 4; i++) subTr.appendChild(document.createElement('td'));
-
-    const subTotal = document.createElement('td');
-    subTotal.className = 'pg-cell-total';
-    subTotal.textContent = currency(section.items.reduce((s, i) => s + calcTotal(i), 0));
-    subTotal.style.fontWeight = '600';
-    subTr.appendChild(subTotal);
-
-    const subMonthly = document.createElement('td');
-    subMonthly.className = 'pg-cell-monthly';
-    const sectionMonthly = section.items.reduce((s, i) => s + calcMonthly(i), 0);
-    subMonthly.textContent = sectionMonthly > 0 ? currency(sectionMonthly) : '';
-    subTr.appendChild(subMonthly);
-
-    // notes + actions
-    subTr.appendChild(document.createElement('td'));
-    subTr.appendChild(document.createElement('td'));
-
-    return subTr;
   }
 
   function createGrandTotalRow(allVisibleItems) {
