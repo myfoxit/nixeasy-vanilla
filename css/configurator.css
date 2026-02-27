@@ -1528,18 +1528,19 @@
 .pg-cell-actions {
   white-space: nowrap;
   width: 88px;
-  padding: 0 6px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  padding: 0 6px !important;
+  text-align: right;
 }
 
-.item-row:hover .pg-cell-actions,
-.header-row:hover .pg-cell-actions,
-.selected-row .pg-cell-actions {
+.pg-cell-actions > * {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  vertical-align: middle;
+}
+
+.item-row:hover .pg-cell-actions > *,
+.header-row:hover .pg-cell-actions > *,
+.selected-row .pg-cell-actions > * {
   opacity: 1;
 }
 
