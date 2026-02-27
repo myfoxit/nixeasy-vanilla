@@ -76,7 +76,10 @@ async function ensureData() {
 
 function searchAll(query) {
   const q = query.trim();
-  if (!q) return getQuickActions('');
+  if (!q) {
+    const actions = getQuickActions('');
+    return actions.length > 0 ? [{ label: 'Quick Actions', items: actions }] : [];
+  }
 
   const results = [];
 
@@ -253,10 +256,7 @@ function open() {
   function doSearch() {
     if (!overlay) return;
     selectedIndex = 0;
-    const query = input.value;
-    const groups = searchAll(query);
-    console.log('[CmdPalette] doSearch query="' + query + '" groups=' + groups.length, 'items=' + groups.reduce((s, g) => s + g.items.length, 0), 'cache.ts=' + cache.ts);
-    renderResults(resultsEl, groups);
+    renderResults(resultsEl, searchAll(input.value));
   }
 
   doSearch();
@@ -319,7 +319,6 @@ function close() {
 }
 
 function renderResults(container, groups) {
-  console.log('[CmdPalette] renderResults called, groups:', groups.length, 'container:', container?.className);
   container.innerHTML = '';
   flatItems = [];
 
