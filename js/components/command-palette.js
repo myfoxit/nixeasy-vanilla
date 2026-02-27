@@ -63,7 +63,7 @@ let cache = { opps: [], quotes: [], customers: [], ts: 0 };
 const CACHE_TTL = 30_000; // 30s
 
 async function ensureData() {
-  if (Date.now() - cache.ts < CACHE_TTL && cache.opps.length + cache.customers.length > 0) return;
+  if (cache.ts > 0 && Date.now() - cache.ts < CACHE_TTL) return;
   const [opps, quotes, customers] = await Promise.all([
     pb.collection('opportunities').getFullList({ expand: 'customer', sort: '-updated', requestKey: null }).catch(() => []),
     pb.collection('quotes').getFullList({ expand: 'opportunity,opportunity.customer', sort: '-updated', requestKey: null }).catch(() => []),
@@ -249,24 +249,32 @@ function open() {
   // Focus
   requestAnimationFrame(() => input.focus());
 
-  // Show quick actions immediately, then load data and re-render
-  renderResults(resultsEl, searchAll(''));
-
-  ensureData().then(() => {
-    if (!overlay) return; // closed while loading
+  // Render immediately with whatever we have (actions always work)
+  function doSearch() {
+    if (!overlay) return;
     selectedIndex = 0;
     renderResults(resultsEl, searchAll(input.value));
+  }
+
+  doSearch();
+
+  // Load data in background, re-render when ready
+  ensureData().then(doSearch).catch(err => {
+    console.error('Command palette: failed to load data', err);
+    doSearch(); // still render actions
   });
 
-  // Debounced search
+  // Debounced search — render immediately, don't block on data
   let debounce = null;
+  let dataLoaded = cache.ts > 0;
   input.addEventListener('input', () => {
     clearTimeout(debounce);
-    debounce = setTimeout(async () => {
-      await ensureData();
-      if (!overlay) return;
-      selectedIndex = 0;
-      renderResults(resultsEl, searchAll(input.value));
+    debounce = setTimeout(() => {
+      doSearch();
+      // If data hasn't loaded yet, trigger a load and re-render
+      if (!dataLoaded) {
+        ensureData().then(() => { dataLoaded = true; doSearch(); }).catch(() => {});
+      }
     }, 80);
   });
 
