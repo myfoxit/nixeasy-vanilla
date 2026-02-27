@@ -576,6 +576,74 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     subtitle.className = 'text-sm text-secondary';
     subtitle.textContent = isTemplateMode ? (templateName || 'New Template') : 'Configure your quote.';
     headerLeft.appendChild(subtitle);
+
+    // Quote switcher (non-template mode only)
+    if (!isTemplateMode && oppId) {
+      const switcherRow = document.createElement('div');
+      switcherRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px;';
+
+      const switcherSelect = document.createElement('select');
+      switcherSelect.className = 'btn btn-secondary';
+      switcherSelect.style.cssText = 'padding:4px 8px;font-size:0.75rem;cursor:pointer;min-width:140px;';
+      switcherSelect.innerHTML = '<option value="">Loading quotes…</option>';
+
+      // Load sibling quotes
+      pb.collection('quotes').getFullList({
+        filter: `opportunity = "${oppId}"`,
+        sort: '-created',
+        requestKey: null,
+      }).then(siblings => {
+        switcherSelect.innerHTML = '';
+        siblings.forEach(sq => {
+          const opt = document.createElement('option');
+          opt.value = sq.id;
+          opt.textContent = sq.name || `Quote ${sq.id.slice(0, 6)}`;
+          if (sq.id === qId) opt.selected = true;
+          switcherSelect.appendChild(opt);
+        });
+        if (siblings.length <= 1) {
+          switcherSelect.style.display = 'none';
+        }
+      }).catch(() => {
+        switcherSelect.innerHTML = '<option>—</option>';
+      });
+
+      switcherSelect.addEventListener('change', () => {
+        if (switcherSelect.value && switcherSelect.value !== qId) {
+          navigate(`/opportunities/${oppId}/quotes/${switcherSelect.value}`);
+        }
+      });
+      switcherRow.appendChild(switcherSelect);
+
+      // Duplicate button
+      const dupBtn = document.createElement('button');
+      dupBtn.className = 'btn btn-secondary';
+      dupBtn.style.cssText = 'padding:4px 8px;font-size:0.75rem;';
+      dupBtn.title = 'Duplicate this quote';
+      dupBtn.textContent = '⧉ Duplicate';
+      dupBtn.addEventListener('click', async () => {
+        try {
+          await save(); // save current state first
+          const orig = await pb.collection('quotes').getOne(qId);
+          const newName = (orig.name || 'Untitled') + ' (copy)';
+          const body = {
+            opportunity: oppId,
+            name: newName,
+            quote_data: orig.quote_data,
+          };
+          if (!isSuperUser() && currentUser?.id) body.created_by = currentUser.id;
+          const dup = await pb.collection('quotes').create(body);
+          showToast(`Duplicated as "${newName}"`, 'success');
+          navigate(`/opportunities/${oppId}/quotes/${dup.id}`);
+        } catch (err) {
+          showToast('Failed to duplicate: ' + (err.message || 'Unknown error'), 'error');
+        }
+      });
+      switcherRow.appendChild(dupBtn);
+
+      headerLeft.appendChild(switcherRow);
+    }
+
     header.appendChild(headerLeft);
 
     // Right side: buttons

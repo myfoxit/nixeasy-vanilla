@@ -3,7 +3,7 @@
 // search, sorting, pagination, new quote modal with AsyncSelect for opportunity,
 // "or" divider, quick-create opportunity option, delete with confirm modal
 
-import { pb } from '../api.js';
+import { pb, isSuperUser } from '../api.js';
 import { navigate } from '../router.js';
 import { createDataTable } from '../components/data-table.js';
 import { createAsyncSelect } from '../components/async-select.js';
@@ -18,6 +18,7 @@ import { currency } from '../utils/format.js';
  */
 export function createQuotesListView(container) {
   container.innerHTML = '';
+  const currentUser = pb.authStore.model;
 
   // --- State ---
   let quotes = [];
@@ -63,13 +64,14 @@ export function createQuotesListView(container) {
         },
       },
       {
-        header: 'ID',
-        style: { width: 100, paddingLeft: '1.5rem' },
-        cellStyle: { paddingLeft: '1.5rem' },
+        header: 'Name',
+        sortable: true,
+        sortKey: 'name',
+        style: { width: 160 },
         render: (q) => {
           const span = document.createElement('span');
-          span.className = 'font-mono text-xs';
-          span.textContent = q.id.slice(0, 8);
+          span.style.fontWeight = '500';
+          span.textContent = q.name || 'Untitled';
           return span;
         },
       },
@@ -124,7 +126,7 @@ export function createQuotesListView(container) {
       },
       {
         header: 'Actions',
-        style: { width: 120, textAlign: 'right' },
+        style: { width: 170, textAlign: 'right' },
         render: (q) => {
           const wrap = document.createElement('div');
           wrap.style.cssText = 'display:flex;justify-content:flex-end;gap:0.5rem;';
@@ -139,6 +141,15 @@ export function createQuotesListView(container) {
             }
           });
 
+          const dupBtn = document.createElement('button');
+          dupBtn.className = 'btn btn-secondary btn-sm';
+          dupBtn.textContent = 'Dup';
+          dupBtn.title = 'Duplicate quote';
+          dupBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            handleDuplicate(q);
+          });
+
           const delBtn = document.createElement('button');
           delBtn.className = 'btn btn-ghost btn-sm';
           delBtn.style.color = 'var(--danger)';
@@ -149,6 +160,7 @@ export function createQuotesListView(container) {
           });
 
           wrap.appendChild(editBtn);
+          wrap.appendChild(dupBtn);
           wrap.appendChild(delBtn);
           return wrap;
         },
@@ -249,6 +261,31 @@ export function createQuotesListView(container) {
     });
   }
 
+  // --- Duplicate ---
+  async function handleDuplicate(quote) {
+    try {
+      const origName = quote.name || 'Untitled';
+      const newName = `${origName} (copy)`;
+      const body = {
+        opportunity: quote.opportunity || quote.expand?.opportunity?.id,
+        quote_data: quote.quote_data,
+        name: newName,
+      };
+      if (!isSuperUser() && currentUser?.id) body.created_by = currentUser.id;
+      const dup = await pb.collection('quotes').create(body);
+      showToast(`Duplicated as "${newName}"`, 'success');
+      // Navigate to the new quote
+      const oppId = quote.opportunity || quote.expand?.opportunity?.id;
+      if (oppId) {
+        navigate(`/opportunities/${oppId}/quotes/${dup.id}`);
+      } else {
+        fetchQuotes();
+      }
+    } catch (err) {
+      showToast('Failed to duplicate: ' + (err.message || 'Unknown error'), 'error');
+    }
+  }
+
   // --- Load functions for AsyncSelects ---
   async function loadOpportunities(searchTerm, pg) {
     const res = await pb.collection('opportunities').getList(pg, 20, {
@@ -287,6 +324,7 @@ export function createQuotesListView(container) {
     try {
       const quote = await pb.collection('quotes').create({
         opportunity: selectedOpportunity,
+        name: 'Quote v1',
         quote_data: {
           lineItems: [],
           items: [],
@@ -336,6 +374,7 @@ export function createQuotesListView(container) {
 
       const quote = await pb.collection('quotes').create({
         opportunity: opp.id,
+        name: 'Quote v1',
         quote_data: {
           lineItems: [],
           items: [],
