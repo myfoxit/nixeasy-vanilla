@@ -1419,6 +1419,61 @@
   border-left: 2px solid var(--primary);
 }
 
+/* SLA compact tag */
+.sla-tag {
+  display: inline-block;
+  max-width: 100px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  background: var(--primary-light, #eef2ff);
+  color: var(--primary, #4f46e5);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.12s;
+  border: 1px solid transparent;
+}
+
+.sla-tag:hover {
+  background: #e0e7ff;
+  border-color: var(--primary);
+}
+
+.sla-dropdown {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  padding: 4px;
+  min-width: 140px;
+  max-width: 220px;
+}
+
+.sla-dropdown-item {
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-main);
+  transition: background 0.1s;
+}
+
+.sla-dropdown-item:hover {
+  background: var(--primary-light, #eef2ff);
+}
+
+.sla-dropdown-item.active {
+  background: var(--primary, #4f46e5);
+  color: #fff;
+  font-weight: 600;
+}
+
 /* Merged item name span */
 .pg-merged-name {
   outline: none;

@@ -302,7 +302,7 @@ export function createQuoteLinesTable({
       const headRow = document.createElement('tr');
       const thData = [
         { text: 'Item', style: 'padding-left:1.5rem;' },
-        { text: 'Service / Hours', style: 'width:140px;' },
+        { text: 'SLA', style: 'width:110px;' },
         { text: 'Price', style: 'width:100px;' },
         { text: 'Qty', style: 'width:100px;' },
         { text: 'Margin %', style: 'width:100px;' },
@@ -403,21 +403,41 @@ export function createQuoteLinesTable({
           hoursDiv.appendChild(hrsLabel);
           tdService.appendChild(hoursDiv);
         } else if (slas && slas.length > 0) {
-          const slaSelect = createSelect({
-            name: `sla-${originalIndex}`,
-            value: item.sla || '',
-            options: [
-              { value: '', label: 'None' },
-              ...slas.map(s => ({ value: s.id, label: s.name }))
-            ],
-            onChange: (val) => {
-              if (state.onUpdateItem) state.onUpdateItem(originalIndex, 'sla', val);
-            },
-            truncateTrigger: true,
-            wrapOptions: true
+          // Compact SLA tag with dropdown on click
+          const currentSla = slas.find(s => s.id === item.sla);
+          const slaTag = document.createElement('span');
+          slaTag.className = 'sla-tag';
+          slaTag.textContent = currentSla ? currentSla.name : 'None';
+          slaTag.title = currentSla ? currentSla.name : 'No SLA selected';
+          slaTag.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Remove any existing SLA dropdown
+            document.querySelectorAll('.sla-dropdown').forEach(d => d.remove());
+            const dropdown = document.createElement('div');
+            dropdown.className = 'sla-dropdown';
+            const rect = slaTag.getBoundingClientRect();
+            dropdown.style.cssText = `position:fixed;top:${rect.bottom + 2}px;left:${rect.left}px;z-index:100;`;
+            [{ value: '', label: 'None' }, ...slas.map(s => ({ value: s.id, label: s.name }))].forEach(opt => {
+              const optEl = document.createElement('div');
+              optEl.className = 'sla-dropdown-item' + (opt.value === (item.sla || '') ? ' active' : '');
+              optEl.textContent = opt.label;
+              optEl.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                if (state.onUpdateItem) state.onUpdateItem(originalIndex, 'sla', opt.value);
+                dropdown.remove();
+              });
+              dropdown.appendChild(optEl);
+            });
+            document.body.appendChild(dropdown);
+            const closeDropdown = (ev) => {
+              if (!dropdown.contains(ev.target) && ev.target !== slaTag) {
+                dropdown.remove();
+                document.removeEventListener('click', closeDropdown);
+              }
+            };
+            setTimeout(() => document.addEventListener('click', closeDropdown), 0);
           });
-          selectInstances.push(slaSelect);
-          tdService.appendChild(slaSelect.element);
+          tdService.appendChild(slaTag);
         } else {
           const dash = document.createElement('span');
           dash.className = 'text-xs text-secondary';
