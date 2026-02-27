@@ -43,6 +43,7 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
   let expandedMerges = new Set(); // track expanded merge badges
   let lastClickedRow = null; // for shift+click range select
   let contextMenu = null;    // current context menu element
+  let contextMenuDismissHandler = null; // stored so we can remove it
 
   // Editable column indices: displayName=0, qty=2, unitPrice=3, margin=4, notes=7
   const EDITABLE_COLS = [0, 2, 3, 4, 7];
@@ -298,14 +299,24 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
 
     contextMenu = menu;
 
-    // Close on outside click
+    // Close on outside click — use a stored handler we can explicitly remove
+    contextMenuDismissHandler = (evt) => {
+      if (contextMenu && !contextMenu.contains(evt.target)) {
+        closeContextMenu();
+      }
+    };
     setTimeout(() => {
-      document.addEventListener('click', closeContextMenu, { once: true });
-      document.addEventListener('contextmenu', closeContextMenu, { once: true });
+      document.addEventListener('click', contextMenuDismissHandler, true);
+      document.addEventListener('contextmenu', contextMenuDismissHandler, true);
     }, 0);
   }
 
   function closeContextMenu() {
+    if (contextMenuDismissHandler) {
+      document.removeEventListener('click', contextMenuDismissHandler, true);
+      document.removeEventListener('contextmenu', contextMenuDismissHandler, true);
+      contextMenuDismissHandler = null;
+    }
     if (contextMenu) {
       contextMenu.remove();
       contextMenu = null;
@@ -428,79 +439,117 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
   // --- Drag & Drop ---
 
   let dragItem = null;
-  let dragGhost = null;
+  let dropGapIndex = null; // gap index: 0=before first, n=after last visible item
+  let dragIndicator = null;
 
   function handleDragStart(e, pItem) {
     dragItem = pItem;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', pItem.id);
-
-    // Style the source row
     const row = e.target.closest('tr');
     if (row) {
       requestAnimationFrame(() => row.classList.add('pg-dragging'));
     }
   }
 
-  function handleDragOver(e) {
+  function getDraggableRows() {
+    return Array.from(el.querySelectorAll('tr.item-row[data-item-id], tr.header-row[data-item-id]'));
+  }
+
+  function handleTableDragOver(e) {
+    if (!dragItem) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
-    // Highlight drop target
-    const tr = e.target.closest('tr');
-    if (tr && tr.dataset.itemId) {
-      el.querySelectorAll('.pg-drag-over').forEach(r => r.classList.remove('pg-drag-over'));
-      tr.classList.add('pg-drag-over');
+    const rows = getDraggableRows();
+    if (rows.length === 0) return;
+    const mouseY = e.clientY;
+
+    // Find the closest gap between rows
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i <= rows.length; i++) {
+      let gapY;
+      if (i === 0) {
+        gapY = rows[0].getBoundingClientRect().top;
+      } else if (i === rows.length) {
+        gapY = rows[rows.length - 1].getBoundingClientRect().bottom;
+      } else {
+        gapY = (rows[i - 1].getBoundingClientRect().bottom + rows[i].getBoundingClientRect().top) / 2;
+      }
+      const dist = Math.abs(mouseY - gapY);
+      if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+    }
+    dropGapIndex = bestIdx;
+    showDropIndicator(rows, bestIdx);
+  }
+
+  function showDropIndicator(rows, gapIndex) {
+    if (!dragIndicator) {
+      dragIndicator = document.createElement('div');
+      dragIndicator.className = 'pg-drop-indicator';
+      el.style.position = 'relative';
+      el.appendChild(dragIndicator);
+    }
+    const wrapperRect = el.getBoundingClientRect();
+    let y;
+    if (gapIndex === 0) {
+      y = rows[0].getBoundingClientRect().top - wrapperRect.top;
+    } else if (gapIndex >= rows.length) {
+      y = rows[rows.length - 1].getBoundingClientRect().bottom - wrapperRect.top;
+    } else {
+      y = (rows[gapIndex - 1].getBoundingClientRect().bottom + rows[gapIndex].getBoundingClientRect().top) / 2 - wrapperRect.top;
+    }
+    dragIndicator.style.top = y + 'px';
+    dragIndicator.style.display = 'block';
+  }
+
+  function hideDropIndicator() {
+    if (dragIndicator) {
+      dragIndicator.style.display = 'none';
     }
   }
 
-  function handleDragLeave(e) {
-    const tr = e.target.closest('tr');
-    if (tr) tr.classList.remove('pg-drag-over');
-  }
-
-  function handleDrop(e, targetItem) {
+  function handleTableDrop(e) {
     e.preventDefault();
-    el.querySelectorAll('.pg-drag-over, .pg-dragging').forEach(r => {
-      r.classList.remove('pg-drag-over', 'pg-dragging');
-    });
+    hideDropIndicator();
+    el.querySelectorAll('.pg-dragging').forEach(r => r.classList.remove('pg-dragging'));
 
-    if (!dragItem || dragItem.id === targetItem.id) {
+    if (!dragItem || dropGapIndex == null) { dragItem = null; return; }
+
+    const visible = getVisibleItems();
+    const dragIdx = visible.findIndex(i => i.id === dragItem.id);
+    if (dragIdx < 0) { dragItem = null; return; }
+
+    // No-op if dropping in same position
+    if (dropGapIndex === dragIdx || dropGapIndex === dragIdx + 1) {
       dragItem = null;
       return;
     }
 
-    // Reorder: place dragItem before targetItem
-    const visible = getVisibleItems();
-    const targetIdx = visible.findIndex(i => i.id === targetItem.id);
+    // Remove dragged item and reinsert at the gap position
+    const reordered = visible.filter(i => i.id !== dragItem.id);
+    const insertIdx = dropGapIndex > dragIdx ? dropGapIndex - 1 : dropGapIndex;
+    reordered.splice(insertIdx, 0, dragItem);
+    reordered.forEach((item, i) => { item.order = i; });
 
-    if (targetIdx >= 0) {
-      let newOrder;
-      if (targetIdx === 0) {
-        newOrder = visible[0].order - 1;
-      } else {
-        newOrder = (visible[targetIdx - 1].order + visible[targetIdx].order) / 2;
-      }
-      dragItem.order = newOrder;
-      reindex();
-      emitChange();
-      render();
-    }
     dragItem = null;
+    dropGapIndex = null;
+    emitChange();
+    render();
   }
 
   function handleDragEnd() {
-    el.querySelectorAll('.pg-drag-over, .pg-dragging').forEach(r => {
-      r.classList.remove('pg-drag-over', 'pg-dragging');
-    });
+    hideDropIndicator();
+    el.querySelectorAll('.pg-dragging').forEach(r => r.classList.remove('pg-dragging'));
     dragItem = null;
+    dropGapIndex = null;
   }
 
   // --- Selection ---
 
   function handleRowCheckbox(pItemId, checked, shiftKey) {
     if (shiftKey && lastClickedRow != null) {
-      // Range select
       const visible = getVisibleItems();
       const lastIdx = visible.findIndex(i => i.id === lastClickedRow);
       const curIdx = visible.findIndex(i => i.id === pItemId);
@@ -519,10 +568,40 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     render();
   }
 
+  function handleRowClick(pItemId, e) {
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const modKey = isMac ? e.metaKey : e.ctrlKey;
+
+    if (e.shiftKey && lastClickedRow != null) {
+      // Range select
+      const visible = getVisibleItems();
+      const lastIdx = visible.findIndex(i => i.id === lastClickedRow);
+      const curIdx = visible.findIndex(i => i.id === pItemId);
+      if (lastIdx >= 0 && curIdx >= 0) {
+        const [start, end] = lastIdx < curIdx ? [lastIdx, curIdx] : [curIdx, lastIdx];
+        for (let i = start; i <= end; i++) {
+          selectedRows.add(visible[i].id);
+        }
+      }
+    } else if (modKey) {
+      // Toggle single row
+      if (selectedRows.has(pItemId)) selectedRows.delete(pItemId);
+      else selectedRows.add(pItemId);
+    } else {
+      // Single select — deselect all others
+      selectedRows.clear();
+      selectedRows.add(pItemId);
+    }
+    lastClickedRow = pItemId;
+    emitSelectionChange();
+    render();
+  }
+
   // --- Render ---
 
   function render() {
     el.innerHTML = '';
+    dragIndicator = null; // cleared by innerHTML = ''
 
     const visibleItems = getVisibleItems();
 
@@ -553,7 +632,7 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
       { text: 'Total', cls: 'pg-col-total', style: 'width:110px;' },
       { text: 'Monthly', cls: 'pg-col-monthly', style: 'width:95px;' },
       { text: 'Notes', cls: 'pg-col-notes', style: 'width:140px;' },
-      { text: '', cls: 'pg-col-actions', style: 'width:60px;' }
+      { text: '', cls: 'pg-col-actions', style: 'width:88px;' }
     ];
     headers.forEach(h => {
       const th = document.createElement('th');
@@ -616,6 +695,36 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     table.appendChild(tbody);
     el.appendChild(table);
 
+    // --- Event delegation on tbody ---
+
+    // Click: row selection (ignore clicks on buttons, checkboxes, editable cells)
+    tbody.addEventListener('click', (e) => {
+      // Ignore clicks on interactive elements
+      if (e.target.closest('button, input, [contenteditable="true"], .pg-merged-badge, .pg-unmerge-btn')) return;
+      const tr = e.target.closest('tr[data-item-id]');
+      if (!tr || tr.classList.contains('hidden-row')) return;
+      handleRowClick(tr.dataset.itemId, e);
+    });
+
+    // Context menu delegation
+    tbody.addEventListener('contextmenu', (e) => {
+      const tr = e.target.closest('tr[data-item-id]');
+      if (!tr || tr.classList.contains('hidden-row')) return;
+      const pItem = state.items.find(i => i.id === tr.dataset.itemId);
+      if (pItem) showContextMenu(e, pItem);
+    });
+
+    // Drag delegation
+    tbody.addEventListener('dragstart', (e) => {
+      const tr = e.target.closest('tr[data-item-id]');
+      if (!tr || tr.classList.contains('hidden-row')) return;
+      const pItem = state.items.find(i => i.id === tr.dataset.itemId);
+      if (pItem) handleDragStart(e, pItem);
+    });
+    tbody.addEventListener('dragover', handleTableDragOver);
+    tbody.addEventListener('drop', handleTableDrop);
+    tbody.addEventListener('dragend', handleDragEnd);
+
     // Keyboard navigation
     table.addEventListener('keydown', handleTableKeydown);
 
@@ -631,12 +740,6 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     tr.className = 'header-row';
     tr.dataset.itemId = hItem.id;
     tr.draggable = true;
-    tr.addEventListener('dragstart', (e) => handleDragStart(e, hItem));
-    tr.addEventListener('dragover', handleDragOver);
-    tr.addEventListener('dragleave', handleDragLeave);
-    tr.addEventListener('drop', (e) => handleDrop(e, hItem));
-    tr.addEventListener('dragend', handleDragEnd);
-    tr.addEventListener('contextmenu', (e) => showContextMenu(e, hItem));
 
     // Drag handle
     const tdDrag = document.createElement('td');
@@ -653,9 +756,8 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = selectedRows.has(hItem.id);
-    cb.addEventListener('change', (e) => handleRowCheckbox(hItem.id, cb.checked, e.shiftKey));
     cb.addEventListener('click', (e) => {
-      // Re-handle to capture shiftKey
+      e.stopPropagation();
       handleRowCheckbox(hItem.id, cb.checked, e.shiftKey);
     });
     tdCheck.appendChild(cb);
@@ -696,12 +798,6 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     tr.dataset.itemId = pItem.id;
     tr.dataset.rowIndex = rowIndex;
     tr.draggable = true;
-    tr.addEventListener('dragstart', (e) => handleDragStart(e, pItem));
-    tr.addEventListener('dragover', handleDragOver);
-    tr.addEventListener('dragleave', handleDragLeave);
-    tr.addEventListener('drop', (e) => handleDrop(e, pItem));
-    tr.addEventListener('dragend', handleDragEnd);
-    tr.addEventListener('contextmenu', (e) => showContextMenu(e, pItem));
 
     const changed = hasSourceChanged(pItem);
     if (changed) tr.classList.add('changed-row');
@@ -723,8 +819,10 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     cb.type = 'checkbox';
     cb.checked = selectedRows.has(pItem.id);
     cb.addEventListener('click', (e) => {
+      e.stopPropagation();
       handleRowCheckbox(pItem.id, cb.checked, e.shiftKey);
     });
+    tdCheck.appendChild(cb);
     if (changed) {
       const dot = document.createElement('span');
       dot.className = 'changed-indicator';
@@ -1090,19 +1188,38 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
   }
 
   function appendMoveButtons(container, pItem) {
+    // Arrows wrapper (vertically stacked)
+    const arrows = document.createElement('span');
+    arrows.className = 'pg-arrows';
+
     const upBtn = document.createElement('button');
     upBtn.className = 'pg-move-btn';
     upBtn.innerHTML = ICONS.arrowUp;
     upBtn.title = 'Move up';
     upBtn.addEventListener('click', (e) => { e.stopPropagation(); moveItem(pItem, -1); });
-    container.appendChild(upBtn);
+    arrows.appendChild(upBtn);
 
     const downBtn = document.createElement('button');
     downBtn.className = 'pg-move-btn';
     downBtn.innerHTML = ICONS.arrowDown;
     downBtn.title = 'Move down';
     downBtn.addEventListener('click', (e) => { e.stopPropagation(); moveItem(pItem, 1); });
-    container.appendChild(downBtn);
+    arrows.appendChild(downBtn);
+    container.appendChild(arrows);
+
+    // ... menu trigger
+    const menuBtn = document.createElement('button');
+    menuBtn.className = 'pg-menu-btn';
+    menuBtn.innerHTML = '&middot;&middot;&middot;';
+    menuBtn.title = 'More actions';
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Simulate right-click at button position
+      const rect = menuBtn.getBoundingClientRect();
+      const fakeEvent = { preventDefault: () => {}, clientX: rect.left, clientY: rect.bottom + 2 };
+      showContextMenu(fakeEvent, pItem);
+    });
+    container.appendChild(menuBtn);
   }
 
   function moveItem(pItem, direction) {
@@ -1381,9 +1498,12 @@ export function buildItemsFromSource(lineItems) {
 
 /**
  * Detect changes between current lineItems and saved presentation snapshots.
+ * Also adds any lineItems that are not represented in the presentation.
  */
 export function detectSourceChanges(presentationItems, lineItems) {
   let hasChanges = false;
+
+  // Check existing items for source changes
   presentationItems.forEach(pItem => {
     if (pItem.type !== 'item' || !pItem.sourceIndices || !pItem._sourceSnapshot) return;
     pItem.sourceIndices.forEach((srcIdx, i) => {
@@ -1396,5 +1516,41 @@ export function detectSourceChanges(presentationItems, lineItems) {
       }
     });
   });
+
+  // Find lineItem indices that are not covered by any presentation item
+  const coveredIndices = new Set();
+  presentationItems.forEach(pItem => {
+    if (pItem.sourceIndices) pItem.sourceIndices.forEach(idx => coveredIndices.add(idx));
+  });
+
+  const maxOrder = presentationItems.length > 0
+    ? Math.max(...presentationItems.map(i => i.order ?? 0))
+    : -1;
+
+  (lineItems || []).forEach((li, idx) => {
+    if (!coveredIndices.has(idx)) {
+      hasChanges = true;
+      presentationItems.push({
+        id: 'p-' + crypto.randomUUID().slice(0, 8),
+        sourceIndices: [idx],
+        type: 'item',
+        displayName: null,
+        displayPrice: null,
+        displayQty: null,
+        displayMargin: null,
+        note: '',
+        hidden: false,
+        order: maxOrder + 1 + idx,
+        _sourceSnapshot: [{
+          name: li.name,
+          price: li.price,
+          amount: li.amount,
+          margin: li.margin,
+          sla: li.sla
+        }]
+      });
+    }
+  });
+
   return hasChanges;
 }

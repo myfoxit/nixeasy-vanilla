@@ -1328,9 +1328,7 @@
   opacity: 0.4;
 }
 
-.pg-drag-over td {
-  box-shadow: 0 -2px 0 0 var(--primary) inset;
-}
+/* (drop indicator line used instead of row highlight) */
 
 .pg-drag-ghost {
   background: var(--surface) !important;
@@ -1498,44 +1496,107 @@
 }
 
 .pg-cell-actions {
-  text-align: center;
   white-space: nowrap;
-  width: 60px;
-  padding: 0 4px;
+  width: 88px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 
-/* Move buttons — SVG arrows, hover-only */
+.item-row:hover .pg-cell-actions,
+.header-row:hover .pg-cell-actions,
+.selected-row .pg-cell-actions {
+  opacity: 1;
+}
+
+/* Arrow buttons wrapper — vertically stacked */
+.pg-arrows {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0px;
+}
+
+/* Move buttons — SVG arrows */
 .pg-move-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: none;
-  border-radius: 50%;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  opacity: 0;
   transition: all 0.15s ease;
 }
 
-.item-row:hover .pg-move-btn,
-.header-row:hover .pg-move-btn {
-  opacity: 0.5;
-}
-
 .pg-move-btn:hover {
-  opacity: 1 !important;
   background: rgba(0,0,0,0.06);
   color: var(--primary);
 }
 
 .pg-move-btn svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
+
+/* ... menu trigger button */
+.pg-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.pg-menu-btn:hover {
+  background: rgba(0,0,0,0.06);
+  color: var(--text-main);
+}
+
+/* Drop indicator line */
+.pg-drop-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--primary);
+  z-index: 10;
+  pointer-events: none;
+  display: none;
+  box-shadow: 0 0 4px rgba(79, 70, 229, 0.4);
+}
+
+.pg-drop-indicator::before,
+.pg-drop-indicator::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.pg-drop-indicator::before { left: -4px; }
+.pg-drop-indicator::after { right: -4px; }
 
 /* --------------------------------------------------------------------------
    Merged item badge
@@ -1852,6 +1913,11 @@
 
 [data-theme="dark"] .presentation-grid .item-row:nth-child(even) td {
   background: rgba(255,255,255,0.015);
+}
+
+[data-theme="dark"] .pg-move-btn:hover,
+[data-theme="dark"] .pg-menu-btn:hover {
+  background: rgba(255,255,255,0.08);
 }
 
 [data-theme="dark"] .btn-danger-outline {
