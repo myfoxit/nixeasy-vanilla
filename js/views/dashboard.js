@@ -23,7 +23,7 @@ export function createDashboardView(container) {
   let widgets = [];
   let globalTimeRange = 'all';
   let configModal = null;
-  let useDefaultConfig = false;
+  let collectionAvailable = false;
   let destroyed = false;
 
   // Start loading
@@ -50,22 +50,19 @@ export function createDashboardView(container) {
   async function loadDashboard() {
     try {
       const result = await pb.collection('dashboard_widgets').getFullList({ sort: '+position' });
-      if (result.length > 0) {
-        widgets = result.map(r => ({
-          id: r.id,
-          widget_type: r.widget_type,
-          title: r.title,
-          data_source: r.data_source,
-          config: typeof r.config === 'string' ? JSON.parse(r.config) : (r.config || {}),
-          position: typeof r.position === 'string' ? JSON.parse(r.position) : (r.position || { order: 0, colSpan: 6 }),
-        }));
-      } else {
-        useDefaultConfig = true;
-        widgets = DEFAULT_DASHBOARD.map(w => ({ ...w }));
-      }
+      // Collection exists — use saved widgets (even if empty = blank dashboard)
+      collectionAvailable = true;
+      widgets = result.map(r => ({
+        id: r.id,
+        widget_type: r.widget_type,
+        title: r.title,
+        data_source: r.data_source,
+        config: typeof r.config === 'string' ? JSON.parse(r.config) : (r.config || {}),
+        position: typeof r.position === 'string' ? JSON.parse(r.position) : (r.position || { order: 0, colSpan: 6 }),
+      }));
     } catch (_) {
-      // Collection doesn't exist yet or fetch failed
-      useDefaultConfig = true;
+      // Collection doesn't exist — fall back to defaults (read-only, not saved)
+      collectionAvailable = false;
       widgets = DEFAULT_DASHBOARD.map(w => ({ ...w }));
     }
 
@@ -131,15 +128,27 @@ export function createDashboardView(container) {
     root.appendChild(header);
 
     // --- Default config banner ---
-    if (useDefaultConfig) {
+    if (!collectionAvailable) {
       const banner = document.createElement('div');
       banner.className = 'dash-banner';
       banner.innerHTML = `
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
         </svg>
-        <span>Using default dashboard. Add widgets via the <strong>+ Add Widget</strong> button to customize.</span>`;
+        <span>Create the <code>dashboard_widgets</code> collection in PocketBase to save your dashboard.</span>`;
       root.appendChild(banner);
+    }
+
+    if (collectionAvailable && widgets.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'text-align:center; padding:60px 20px; color:var(--text-secondary);';
+      empty.innerHTML = `
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px; opacity:0.4; display:block;">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>
+        </svg>
+        <p style="font-size:1rem; margin-bottom:4px;">Your dashboard is empty</p>
+        <p style="font-size:0.85rem;">Click <strong>+ Add Widget</strong> to get started</p>`;
+      root.appendChild(empty);
     }
 
     // --- Widget Grid ---
@@ -179,7 +188,7 @@ export function createDashboardView(container) {
         }
 
         // Persist to PocketBase if the collection exists
-        if (!useDefaultConfig) {
+        if (collectionAvailable) {
           try {
             const payload = {
               widget_type: draft.widget_type,
@@ -208,7 +217,7 @@ export function createDashboardView(container) {
 
         widgets = widgets.filter(x => x.id !== w.id);
 
-        if (!useDefaultConfig && !w.id.startsWith('def-')) {
+        if (collectionAvailable && !w.id.startsWith('def-')) {
           try {
             await pb.collection('dashboard_widgets').delete(w.id);
           } catch (e) {
