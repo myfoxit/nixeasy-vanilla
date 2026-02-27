@@ -293,26 +293,110 @@ export function openWidgetConfigModal(widget, { onSave, onDelete, onCancel }) {
   titleInput.addEventListener('input', () => { draft.title = titleInput.value; });
   body.appendChild(formGroup('Title', titleInput));
 
+  // --- Constrained options based on selections ---
+  const METRICS_BY_SOURCE = {
+    opportunities: METRICS,
+    quotes: [
+      { value: 'count', label: 'Count' },
+    ],
+    installed_base: [
+      { value: 'count', label: 'Count' },
+    ],
+    licenses: [
+      { value: 'count', label: 'Count' },
+    ],
+  };
+
+  const GROUPBY_BY_SOURCE = {
+    opportunities: [
+      { value: 'none', label: 'None' },
+      { value: 'status', label: 'Status' },
+      { value: 'customer', label: 'Customer' },
+      { value: 'month', label: 'Month' },
+      { value: 'quarter', label: 'Quarter' },
+      { value: 'year', label: 'Year' },
+    ],
+    quotes: [
+      { value: 'none', label: 'None' },
+      { value: 'month', label: 'Month' },
+      { value: 'quarter', label: 'Quarter' },
+      { value: 'year', label: 'Year' },
+    ],
+    installed_base: [
+      { value: 'none', label: 'None' },
+      { value: 'customer', label: 'Customer' },
+      { value: 'expiry_month', label: 'Expiry Month' },
+    ],
+    licenses: [
+      { value: 'none', label: 'None' },
+    ],
+  };
+
+  const GROUPBY_BY_CHART = {
+    card: ['none'],
+    line: ['month', 'quarter', 'year'],
+    bar: ['status', 'customer', 'month', 'quarter', 'year', 'expiry_month'],
+    pie: ['status', 'customer'],
+    donut: ['status', 'customer'],
+    funnel: ['status'],
+  };
+
+  function getValidMetrics() {
+    return METRICS_BY_SOURCE[draft.data_source] || [{ value: 'count', label: 'Count' }];
+  }
+
+  function getValidGroupBy() {
+    const bySource = GROUPBY_BY_SOURCE[draft.data_source] || [{ value: 'none', label: 'None' }];
+    const allowedByChart = GROUPBY_BY_CHART[draft.widget_type];
+    if (!allowedByChart) return bySource;
+    return bySource.filter(g => allowedByChart.includes(g.value));
+  }
+
+  // Containers for dynamic dropdowns
+  const metricContainer = document.createElement('div');
+  const groupByContainer = document.createElement('div');
+
+  function rebuildDependentDropdowns() {
+    // Fix metric if invalid for new source
+    const validMetrics = getValidMetrics();
+    if (!validMetrics.find(m => m.value === draft.config.metric)) {
+      draft.config.metric = validMetrics[0].value;
+    }
+    metricContainer.innerHTML = '';
+    metricContainer.appendChild(formGroup('Metric', makeSelect(validMetrics, draft.config.metric, (v) => {
+      draft.config.metric = v;
+    })));
+
+    // Fix groupBy if invalid for new source/chart combo
+    const validGroupBy = getValidGroupBy();
+    if (!validGroupBy.find(g => g.value === draft.config.groupBy)) {
+      draft.config.groupBy = validGroupBy[0]?.value || 'none';
+    }
+    groupByContainer.innerHTML = '';
+    groupByContainer.appendChild(formGroup('Group By', makeSelect(validGroupBy, draft.config.groupBy, (v) => {
+      draft.config.groupBy = v;
+    })));
+  }
+
   // Two-column row for type + source
   const row1 = document.createElement('div');
   row1.className = 'form-row';
   row1.appendChild(formGroup('Chart Type', makeSelect(WIDGET_TYPES, draft.widget_type, (v) => {
     draft.widget_type = v;
+    rebuildDependentDropdowns();
   })));
   row1.appendChild(formGroup('Data Source', makeSelect(DATA_SOURCES, draft.data_source, (v) => {
     draft.data_source = v;
+    rebuildDependentDropdowns();
   })));
   body.appendChild(row1);
 
-  // Two-column row for metric + group by
+  // Two-column row for metric + group by (dynamic)
   const row2 = document.createElement('div');
   row2.className = 'form-row';
-  row2.appendChild(formGroup('Metric', makeSelect(METRICS, draft.config.metric, (v) => {
-    draft.config.metric = v;
-  })));
-  row2.appendChild(formGroup('Group By', makeSelect(GROUP_BY_OPTIONS, draft.config.groupBy, (v) => {
-    draft.config.groupBy = v;
-  })));
+  row2.appendChild(metricContainer);
+  row2.appendChild(groupByContainer);
+  rebuildDependentDropdowns();
   body.appendChild(row2);
 
   // Two-column row for time range + size
