@@ -41,6 +41,7 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
   let editingCell = null;   // { row, col }
   let editOriginalValue = '';
   let expandedMerges = new Set(); // track expanded merge badges
+  let collapsedGroups = new Set(); // track collapsed group headers
   let lastClickedRow = null; // for shift+click range select
   let contextMenu = null;    // current context menu element
   let contextMenuDismissHandler = null; // stored so we can remove it
@@ -657,11 +658,17 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
         rowIndex++;
       }
 
+      const isCollapsed = section.header && collapsedGroups.has(section.header.id);
+
       section.items.forEach(pItem => {
         const tr = createItemRow(pItem, rowIndex);
-        // Indent items that belong to a group (have a header above)
         if (section.header) {
           tr.classList.add('grouped-item');
+          // Indent the name cell directly
+          const nameCell = tr.querySelector('td:nth-child(3)');
+          if (nameCell) nameCell.style.paddingLeft = '36px';
+          // Hide if group is collapsed
+          if (isCollapsed) tr.style.display = 'none';
         }
         tbody.appendChild(tr);
         rowIndex++;
@@ -681,6 +688,7 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
       // Subtotal row
       if (section.header && section.items.length > 0) {
         const subTr = createSubtotalRow(section);
+        if (isCollapsed) subTr.style.display = 'none';
         tbody.appendChild(subTr);
       }
     });
@@ -697,6 +705,14 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     tbody.appendChild(grandTr);
 
     table.appendChild(tbody);
+
+    // Update collapsed group count badges
+    sections.forEach(section => {
+      if (section.header && collapsedGroups.has(section.header.id)) {
+        const badge = table.querySelector(`.pg-group-count[data-header-id="${section.header.id}"]`);
+        if (badge) badge.textContent = `(${section.items.length} items)`;
+      }
+    });
     el.appendChild(table);
 
     // --- Event delegation on tbody ---
@@ -771,19 +787,52 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     const tdName = document.createElement('td');
     tdName.colSpan = 8;
     tdName.className = 'pg-cell-header-name';
-    tdName.setAttribute('contenteditable', 'true');
-    tdName.textContent = getDisplayName(hItem);
-    tdName.addEventListener('blur', () => {
-      const newVal = tdName.textContent.trim();
+
+    // Collapse/expand chevron
+    const chevron = document.createElement('span');
+    chevron.className = 'pg-group-chevron';
+    chevron.innerHTML = collapsedGroups.has(hItem.id)
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
+    chevron.title = collapsedGroups.has(hItem.id) ? 'Expand group' : 'Collapse group';
+    chevron.style.cssText = 'cursor:pointer; display:inline-flex; align-items:center; margin-right:6px; opacity:0.6; vertical-align:middle;';
+    chevron.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (collapsedGroups.has(hItem.id)) {
+        collapsedGroups.delete(hItem.id);
+      } else {
+        collapsedGroups.add(hItem.id);
+      }
+      render();
+    });
+    tdName.appendChild(chevron);
+
+    // Editable name span
+    const nameSpan = document.createElement('span');
+    nameSpan.setAttribute('contenteditable', 'true');
+    nameSpan.textContent = getDisplayName(hItem);
+    // Show item count when collapsed
+    if (collapsedGroups.has(hItem.id)) {
+      const countBadge = document.createElement('span');
+      countBadge.style.cssText = 'font-size:0.7rem; color:var(--text-secondary); font-weight:400; margin-left:8px;';
+      // We'll set the count after sections are computed — for now use a placeholder
+      countBadge.className = 'pg-group-count';
+      countBadge.dataset.headerId = hItem.id;
+      tdName.appendChild(countBadge);
+    }
+
+    nameSpan.addEventListener('blur', () => {
+      const newVal = nameSpan.textContent.trim();
       if (newVal !== getDisplayName(hItem)) {
         hItem.displayName = newVal || 'Section';
         emitChange();
       }
     });
-    tdName.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); tdName.blur(); }
-      if (e.key === 'Escape') { tdName.textContent = getDisplayName(hItem); tdName.blur(); }
+    nameSpan.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); nameSpan.blur(); }
+      if (e.key === 'Escape') { nameSpan.textContent = getDisplayName(hItem); nameSpan.blur(); }
     });
+    tdName.appendChild(nameSpan);
     tr.appendChild(tdName);
 
     // Actions
