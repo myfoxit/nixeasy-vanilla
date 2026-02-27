@@ -172,13 +172,13 @@ function searchAll(query) {
 
 function getQuickActions(query) {
   const actions = [
-    { type: 'action', icon: ICONS.action, title: 'New Quote', subtitle: 'Create a new quote', keywords: 'new quote create', action: () => navigate('/quotes'), score: 50 },
+    { type: 'action', icon: ICONS.action, title: 'New Quote', subtitle: 'Create a new quote', keywords: 'new quote create', action: () => navigate('/allQuotes'), score: 50 },
     { type: 'action', icon: ICONS.action, title: 'New Opportunity', subtitle: 'Create a new opportunity', keywords: 'new opportunity create', action: () => navigate('/opportunities'), score: 50 },
-    { type: 'action', icon: ICONS.nav, title: 'Dashboard', subtitle: 'Go to dashboard', keywords: 'dashboard home overview', action: () => navigate('/'), score: 45 },
+    { type: 'action', icon: ICONS.nav, title: 'Dashboard', subtitle: 'Go to dashboard', keywords: 'dashboard home overview', action: () => navigate('/dashboard'), score: 45 },
     { type: 'action', icon: ICONS.nav, title: 'Opportunities', subtitle: 'View all opportunities', keywords: 'opportunities pipeline deals', action: () => navigate('/opportunities'), score: 40 },
-    { type: 'action', icon: ICONS.nav, title: 'Quotes', subtitle: 'View all quotes', keywords: 'quotes list', action: () => navigate('/quotes'), score: 40 },
+    { type: 'action', icon: ICONS.nav, title: 'Quotes', subtitle: 'View all quotes', keywords: 'quotes list', action: () => navigate('/allQuotes'), score: 40 },
     { type: 'action', icon: ICONS.nav, title: 'Customers', subtitle: 'View all customers', keywords: 'customers accounts', action: () => navigate('/customers'), score: 40 },
-    { type: 'action', icon: ICONS.nav, title: 'Installed Base', subtitle: 'View installed base', keywords: 'installed base licenses', action: () => navigate('/installed-base'), score: 35 },
+    { type: 'action', icon: ICONS.nav, title: 'Installed Base', subtitle: 'View installed base', keywords: 'installed base licenses', action: () => navigate('/installedBase'), score: 35 },
     { type: 'action', icon: ICONS.nav, title: 'Templates', subtitle: 'Quote templates', keywords: 'templates presets', action: () => navigate('/templates'), score: 35 },
   ];
 
@@ -249,14 +249,22 @@ function open() {
   // Focus
   requestAnimationFrame(() => input.focus());
 
-  // Initial render
+  // Show quick actions immediately, then load data and re-render
   renderResults(resultsEl, searchAll(''));
+
+  ensureData().then(() => {
+    if (!overlay) return; // closed while loading
+    selectedIndex = 0;
+    renderResults(resultsEl, searchAll(input.value));
+  });
 
   // Debounced search
   let debounce = null;
   input.addEventListener('input', () => {
     clearTimeout(debounce);
-    debounce = setTimeout(() => {
+    debounce = setTimeout(async () => {
+      await ensureData();
+      if (!overlay) return;
       selectedIndex = 0;
       renderResults(resultsEl, searchAll(input.value));
     }, 80);
@@ -288,8 +296,6 @@ function open() {
     }
   });
 
-  // Preload data
-  ensureData();
 }
 
 function close() {
