@@ -1419,6 +1419,88 @@
   border-left: 2px solid var(--primary);
 }
 
+/* Wizard Steps */
+.wizard-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 10px 0 4px;
+}
+
+.wizard-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.wizard-step:hover {
+  background: var(--primary-light, #eef2ff);
+}
+
+.wizard-step.active {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.wizard-step.done {
+  color: var(--primary);
+  opacity: 0.7;
+}
+
+.wizard-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--border);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.wizard-step.active .wizard-step-num {
+  background: var(--primary);
+  color: #fff;
+}
+
+.wizard-step.done .wizard-step-num {
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.65rem;
+}
+
+.wizard-step-label {
+  white-space: nowrap;
+}
+
+.wizard-connector {
+  width: 40px;
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  transition: background 0.2s;
+}
+
+.wizard-connector.active {
+  background: var(--primary);
+}
+
+.wizard-content {
+  min-height: calc(100vh - 140px);
+}
+
 /* SLA compact tag */
 .sla-tag {
   display: inline-block;

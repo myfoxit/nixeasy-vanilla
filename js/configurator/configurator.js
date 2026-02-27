@@ -18,6 +18,7 @@ import { createSummaryCard } from './summary-card.js';
 import { createContextBanner } from './context-banner.js';
 import { createInstalledBasePanel } from './installed-base-panel.js';
 import { createPresentationEditor } from './presentation-editor.js';
+import { createPresentationGrid, buildItemsFromSource } from './presentation-grid.js';
 import {
   MEASURE_POINT_LICENSE_CONFIGS,
   calculateLicenseDistribution
@@ -53,6 +54,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   };
   let qId = quoteId;
   let quoteName = '';
+  let wizardStep = 1; // 1=Items, 2=Presentation, 3=Export
   let templates = [];
   let templateName = '';
   let templateDesc = '';
@@ -571,252 +573,168 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     container.innerHTML = '';
 
     // =============================================
-    // STICKY HEADER
+    // STICKY HEADER WITH WIZARD STEPS
     // =============================================
     const header = document.createElement('header');
     header.className = 'main-header';
-    header.style.cssText = 'position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:1px solid var(--border);padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center;';
+    header.style.cssText = 'position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:1px solid var(--border);padding:0.75rem 2rem;';
 
-    // Left side: title + subtitle
+    // Top row: back + title + name + actions
+    const headerTop = document.createElement('div');
+    headerTop.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+
     const headerLeft = document.createElement('div');
-    const titleH2 = document.createElement('h2');
-    titleH2.textContent = isTemplateMode ? 'Template Editor' : 'Quote Builder';
-    headerLeft.appendChild(titleH2);
-
-    // Editable quote name (non-template mode)
-    if (!isTemplateMode) {
-      const nameRow = document.createElement('div');
-      nameRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:2px;';
-
-      const nameInput = document.createElement('input');
-      nameInput.type = 'text';
-      nameInput.value = quoteName;
-      nameInput.placeholder = 'Quote name…';
-      nameInput.style.cssText = 'border:none;border-bottom:1px solid transparent;background:transparent;font-size:0.82rem;color:var(--text-secondary);padding:2px 0;outline:none;min-width:120px;max-width:220px;transition:border-color 0.15s;';
-      nameInput.addEventListener('focus', () => { nameInput.style.borderBottomColor = 'var(--primary)'; });
-      nameInput.addEventListener('blur', () => {
-        nameInput.style.borderBottomColor = 'transparent';
-        const newName = nameInput.value.trim();
-        if (newName !== quoteName) {
-          quoteName = newName;
-          saveQuoteName();
-        }
-      });
-      nameInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') nameInput.blur();
-      });
-      nameRow.appendChild(nameInput);
-
-      // Sibling quotes tabs (loaded async)
-      const tabsWrap = document.createElement('div');
-      tabsWrap.style.cssText = 'display:flex;gap:4px;margin-left:8px;';
-      nameRow.appendChild(tabsWrap);
-
-      if (oppId) {
-        pb.collection('quotes').getFullList({
-          filter: `opportunity = "${oppId}"`,
-          sort: '-created',
-          requestKey: null,
-        }).then(siblings => {
-          if (siblings.length <= 1) return;
-          siblings.forEach(sq => {
-            const tab = document.createElement('button');
-            const isCurrent = sq.id === qId;
-            tab.style.cssText = `padding:2px 8px;font-size:0.7rem;border-radius:4px;border:1px solid ${isCurrent ? 'var(--primary)' : 'var(--border)'};background:${isCurrent ? 'var(--primary-light)' : 'transparent'};color:${isCurrent ? 'var(--primary)' : 'var(--text-secondary)'};cursor:pointer;font-weight:${isCurrent ? '600' : '400'};white-space:nowrap;`;
-            tab.textContent = sq.name || `Quote ${sq.id.slice(0, 6)}`;
-            if (!isCurrent) {
-              tab.addEventListener('click', () => navigate(`/opportunities/${oppId}/quotes/${sq.id}`));
-            }
-            tabsWrap.appendChild(tab);
-          });
-        }).catch(() => {});
-      }
-
-      headerLeft.appendChild(nameRow);
-    } else {
-      const subtitle = document.createElement('p');
-      subtitle.className = 'text-sm text-secondary';
-      subtitle.textContent = templateName || 'New Template';
-      headerLeft.appendChild(subtitle);
-    }
-
-    header.appendChild(headerLeft);
-
-    // Right side: buttons
-    const headerRight = document.createElement('div');
-    headerRight.className = 'flex gap-2';
+    headerLeft.style.cssText = 'display:flex;align-items:center;gap:12px;';
 
     // Back button
     const backBtn = document.createElement('button');
     backBtn.className = 'btn btn-secondary';
-    backBtn.innerHTML = '&larr; Back';
+    backBtn.style.cssText = 'padding:6px 10px;';
+    backBtn.innerHTML = '&larr;';
+    backBtn.title = 'Back';
     backBtn.addEventListener('click', () => {
-      if (typeof onBack === 'function') onBack();
+      if (wizardStep > 1) { wizardStep--; renderWizardContent(); updateStepBar(); }
+      else if (typeof onBack === 'function') onBack();
     });
-    headerRight.appendChild(backBtn);
+    headerLeft.appendChild(backBtn);
 
-    // --- Export Button (opens Presentation Editor) ---
-    const exportBtn = document.createElement('button');
-    exportBtn.className = 'btn btn-secondary';
-    const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    exportSvg.setAttribute('fill', 'none');
-    exportSvg.setAttribute('viewBox', '0 0 24 24');
-    exportSvg.setAttribute('stroke-width', '1.5');
-    exportSvg.setAttribute('stroke', 'currentColor');
-    exportSvg.style.cssText = 'width:16px;height:16px;margin-right:6px;';
-    const exportPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    exportPath.setAttribute('stroke-linecap', 'round');
-    exportPath.setAttribute('stroke-linejoin', 'round');
-    exportPath.setAttribute('d', 'M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3');
-    exportSvg.appendChild(exportPath);
-    exportBtn.appendChild(exportSvg);
-    exportBtn.appendChild(document.createTextNode('Export'));
-    exportBtn.addEventListener('click', () => openPresentationEditor());
-    headerRight.appendChild(exportBtn);
+    const titleEl = document.createElement('h2');
+    titleEl.style.cssText = 'font-size:1.1rem;margin:0;';
+    titleEl.textContent = isTemplateMode ? 'Template Editor' : 'Quote Builder';
+    headerLeft.appendChild(titleEl);
 
-    // --- Quick Export Popover (direct export without presentation editor) ---
-    const quickExportTrigger = document.createElement('button');
-    quickExportTrigger.className = 'btn btn-secondary';
-    quickExportTrigger.style.cssText = 'padding:6px 8px;font-size:0.75rem;';
-    quickExportTrigger.title = 'Quick Export (skip editor)';
-    const qeSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    qeSvg.setAttribute('fill', 'none');
-    qeSvg.setAttribute('viewBox', '0 0 24 24');
-    qeSvg.setAttribute('stroke-width', '1.5');
-    qeSvg.setAttribute('stroke', 'currentColor');
-    qeSvg.style.cssText = 'width:14px;height:14px;';
-    const qePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    qePath.setAttribute('stroke-linecap', 'round');
-    qePath.setAttribute('stroke-linejoin', 'round');
-    qePath.setAttribute('d', 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z');
-    qeSvg.appendChild(qePath);
-    quickExportTrigger.appendChild(qeSvg);
-
-    exportPopoverInstance = createPopover({
-      trigger: quickExportTrigger,
-      content: () => buildExportContent(),
-      align: 'right',
-      width: 260
-    });
-    headerRight.appendChild(exportPopoverInstance.element);
-
-    // --- Quote-mode buttons ---
+    // Editable quote name
     if (!isTemplateMode) {
-      // Load Template Popover
-      const loadTrigger = document.createElement('button');
-      loadTrigger.className = 'btn btn-secondary';
-      const loadSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      loadSvg.setAttribute('fill', 'none');
-      loadSvg.setAttribute('viewBox', '0 0 24 24');
-      loadSvg.setAttribute('stroke-width', '1.5');
-      loadSvg.setAttribute('stroke', 'currentColor');
-      loadSvg.style.cssText = 'width:16px;height:16px;margin-right:6px;';
-      const loadPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      loadPath.setAttribute('stroke-linecap', 'round');
-      loadPath.setAttribute('stroke-linejoin', 'round');
-      loadPath.setAttribute('d', 'M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5');
-      loadSvg.appendChild(loadPath);
-      loadTrigger.appendChild(loadSvg);
-      loadTrigger.appendChild(document.createTextNode('Load Template'));
-
-      loadPopoverInstance = createPopover({
-        trigger: loadTrigger,
-        content: () => buildLoadTemplateContent(),
-        align: 'right',
-        width: 320
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = quoteName;
+      nameInput.placeholder = 'Quote name…';
+      nameInput.style.cssText = 'border:none;border-bottom:1px solid transparent;background:transparent;font-size:0.8rem;color:var(--text-secondary);padding:2px 4px;outline:none;width:160px;transition:border-color 0.15s;';
+      nameInput.addEventListener('focus', () => { nameInput.style.borderBottomColor = 'var(--primary)'; });
+      nameInput.addEventListener('blur', () => {
+        nameInput.style.borderBottomColor = 'transparent';
+        const v = nameInput.value.trim();
+        if (v !== quoteName) { quoteName = v; saveQuoteName(); }
       });
+      nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') nameInput.blur(); });
+      headerLeft.appendChild(nameInput);
+    }
+
+    headerTop.appendChild(headerLeft);
+
+    // Right actions (always visible)
+    const headerRight = document.createElement('div');
+    headerRight.className = 'flex gap-2';
+    headerRight.style.cssText = 'align-items:center;';
+
+    if (!isTemplateMode) {
+      // Load Template
+      const loadTrigger = document.createElement('button');
+      loadTrigger.className = 'btn btn-secondary btn-sm';
+      loadTrigger.textContent = 'Load Template';
+      loadPopoverInstance = createPopover({ trigger: loadTrigger, content: () => buildLoadTemplateContent(), align: 'right', width: 320 });
       headerRight.appendChild(loadPopoverInstance.element);
 
-      // Save as Template Popover
+      // Save as Template
       const saveTplTrigger = document.createElement('button');
-      saveTplTrigger.className = 'btn btn-secondary';
-      const saveTplSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      saveTplSvg.setAttribute('fill', 'none');
-      saveTplSvg.setAttribute('viewBox', '0 0 24 24');
-      saveTplSvg.setAttribute('stroke-width', '1.5');
-      saveTplSvg.setAttribute('stroke', 'currentColor');
-      saveTplSvg.style.cssText = 'width:16px;height:16px;margin-right:6px;';
-      const saveTplPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      saveTplPath.setAttribute('stroke-linecap', 'round');
-      saveTplPath.setAttribute('stroke-linejoin', 'round');
-      saveTplPath.setAttribute('d', 'M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z');
-      saveTplSvg.appendChild(saveTplPath);
-      saveTplTrigger.appendChild(saveTplSvg);
-      saveTplTrigger.appendChild(document.createTextNode('Save as Template'));
-
-      savePopoverInstance = createPopover({
-        trigger: saveTplTrigger,
-        content: () => buildSaveTemplateContent(),
-        align: 'right',
-        width: 320
-      });
+      saveTplTrigger.className = 'btn btn-secondary btn-sm';
+      saveTplTrigger.textContent = 'Save as Template';
+      savePopoverInstance = createPopover({ trigger: saveTplTrigger, content: () => buildSaveTemplateContent(), align: 'right', width: 320 });
       headerRight.appendChild(savePopoverInstance.element);
 
-      // Duplicate Quote button
+      // Duplicate
       if (qId) {
-        const dupQuoteBtn = document.createElement('button');
-        dupQuoteBtn.className = 'btn btn-secondary';
-        dupQuoteBtn.textContent = 'Duplicate';
-        dupQuoteBtn.title = 'Save & duplicate this quote';
-        dupQuoteBtn.addEventListener('click', async () => {
+        const dupBtn = document.createElement('button');
+        dupBtn.className = 'btn btn-secondary btn-sm';
+        dupBtn.textContent = 'Duplicate';
+        dupBtn.addEventListener('click', async () => {
           try {
-            dupQuoteBtn.disabled = true;
-            dupQuoteBtn.textContent = 'Duplicating…';
+            dupBtn.disabled = true;
             await save();
             const orig = await pb.collection('quotes').getOne(qId);
             const newName = (orig.name || quoteName || 'Untitled') + ' (copy)';
-            const body = {
-              opportunity: oppId,
-              quote_data: orig.quote_data,
-            };
-            // Try setting name — field might not exist
+            const body = { opportunity: oppId, quote_data: orig.quote_data };
             try { body.name = newName; } catch (_) {}
             if (!isSuperUser() && currentUser?.id) body.created_by = currentUser.id;
             const dup = await pb.collection('quotes').create(body);
             showToast(`Duplicated as "${newName}"`, 'success');
             navigate(`/opportunities/${oppId}/quotes/${dup.id}`);
           } catch (err) {
-            showToast('Failed to duplicate: ' + (err.message || 'Unknown error'), 'error');
-            dupQuoteBtn.disabled = false;
-            dupQuoteBtn.textContent = 'Duplicate';
+            showToast('Failed: ' + (err.message || 'Unknown'), 'error');
+            dupBtn.disabled = false;
           }
         });
-        headerRight.appendChild(dupQuoteBtn);
+        headerRight.appendChild(dupBtn);
       }
 
-      // Save Quote button
-      const saveQuoteBtn = document.createElement('button');
-      saveQuoteBtn.className = 'btn btn-primary';
-      saveQuoteBtn.textContent = 'Save Quote';
-      saveQuoteBtn.addEventListener('click', async () => {
-        try {
-          await save();
-          showToast('Quote saved successfully', 'success');
-        } catch (err) {
-          showToast('Failed to save quote: ' + (err.message || 'Unknown error'), 'error');
-        }
+      // Save
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'btn btn-primary btn-sm';
+      saveBtn.textContent = 'Save';
+      saveBtn.addEventListener('click', async () => {
+        try { await save(); showToast('Saved', 'success'); } catch (err) { showToast('Failed to save', 'error'); }
       });
-      headerRight.appendChild(saveQuoteBtn);
+      headerRight.appendChild(saveBtn);
+    } else {
+      const saveTplBtn = document.createElement('button');
+      saveTplBtn.className = 'btn btn-primary btn-sm';
+      saveTplBtn.textContent = 'Save Template';
+      saveTplBtn.addEventListener('click', async () => {
+        try { await saveTemplate(); showToast('Template saved', 'success'); } catch (err) { showToast('Failed', 'error'); }
+      });
+      headerRight.appendChild(saveTplBtn);
     }
 
-    // --- Template-mode save button ---
-    if (isTemplateMode) {
-      const saveTemplateBtn = document.createElement('button');
-      saveTemplateBtn.className = 'btn btn-primary';
-      saveTemplateBtn.textContent = 'Save Template';
-      saveTemplateBtn.addEventListener('click', async () => {
-        try {
-          await saveTemplate();
-          showToast('Template saved successfully', 'success');
-        } catch (err) {
-          showToast('Failed to save template: ' + (err.message || 'Unknown error'), 'error');
+    headerTop.appendChild(headerRight);
+    header.appendChild(headerTop);
+
+    // Wizard step bar (non-template mode)
+    if (!isTemplateMode) {
+      const stepBar = document.createElement('div');
+      stepBar.className = 'wizard-steps';
+      const steps = [
+        { num: 1, label: 'Add Items', icon: '📦' },
+        { num: 2, label: 'Presentation', icon: '🎨' },
+        { num: 3, label: 'Export', icon: '📤' },
+      ];
+      steps.forEach((s, i) => {
+        if (i > 0) {
+          const connector = document.createElement('div');
+          connector.className = 'wizard-connector' + (wizardStep > s.num - 1 ? ' active' : '');
+          stepBar.appendChild(connector);
         }
+        const stepEl = document.createElement('button');
+        stepEl.className = 'wizard-step' + (wizardStep === s.num ? ' active' : '') + (wizardStep > s.num ? ' done' : '');
+        stepEl.innerHTML = `<span class="wizard-step-num">${wizardStep > s.num ? '✓' : s.num}</span><span class="wizard-step-label">${s.label}</span>`;
+        stepEl.addEventListener('click', () => {
+          wizardStep = s.num;
+          renderWizardContent();
+          updateStepBar();
+        });
+        stepBar.appendChild(stepEl);
       });
-      headerRight.appendChild(saveTemplateBtn);
+      header.appendChild(stepBar);
+
+      // Keep reference for updates
+      header._stepBar = stepBar;
     }
 
-    header.appendChild(headerRight);
     container.appendChild(header);
+
+    function updateStepBar() {
+      const bar = header._stepBar;
+      if (!bar) return;
+      const stepEls = bar.querySelectorAll('.wizard-step');
+      const connectors = bar.querySelectorAll('.wizard-connector');
+      stepEls.forEach((el, i) => {
+        const num = i + 1;
+        el.className = 'wizard-step' + (wizardStep === num ? ' active' : '') + (wizardStep > num ? ' done' : '');
+        el.querySelector('.wizard-step-num').textContent = wizardStep > num ? '✓' : num;
+      });
+      connectors.forEach((c, i) => {
+        c.className = 'wizard-connector' + (wizardStep > i + 1 ? ' active' : '');
+      });
+    }
 
     // =============================================
     // CONTEXT BANNER (quote mode only)
@@ -839,103 +757,191 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     }
 
     // =============================================
-    // INSTALLED BASE PANEL (collapsible)
+    // WIZARD CONTENT CONTAINER
     // =============================================
-    installedBaseSectionEl = document.createElement('div');
-    container.appendChild(installedBaseSectionEl);
-    renderInstalledBaseSection();
+    const wizardContent = document.createElement('div');
+    wizardContent.className = 'wizard-content';
+    container.appendChild(wizardContent);
 
     // =============================================
-    // TEMPLATE NAME/DESC INPUTS (template mode)
+    // RENDER WIZARD CONTENT (switches by step)
     // =============================================
-    if (isTemplateMode) {
-      const tplInputSection = document.createElement('div');
-      tplInputSection.className = 'p-6 pb-0';
+    function renderWizardContent() {
+      wizardContent.innerHTML = '';
+      // Clean up sub-component instances
+      catalogPanelInstance = null;
+      quoteLinesInstance = null;
+      summaryCardInstance = null;
 
-      const tplCard = document.createElement('div');
-      tplCard.className = 'card p-4 mb-0 grid grid-cols-2 gap-4';
-
-      // Name input
-      const nameGroup = document.createElement('div');
-      const nameLabel = document.createElement('label');
-      nameLabel.className = 'text-sm text-secondary mb-1 block';
-      nameLabel.textContent = 'Template Name';
-      nameGroup.appendChild(nameLabel);
-
-      const nameInput = document.createElement('input');
-      nameInput.value = templateName;
-      nameInput.addEventListener('input', (e) => {
-        templateName = e.target.value;
-      });
-      nameGroup.appendChild(nameInput);
-      tplCard.appendChild(nameGroup);
-
-      // Desc input
-      const descGroup = document.createElement('div');
-      const descLabel = document.createElement('label');
-      descLabel.className = 'text-sm text-secondary mb-1 block';
-      descLabel.textContent = 'Description';
-      descGroup.appendChild(descLabel);
-
-      const descInput = document.createElement('input');
-      descInput.value = templateDesc;
-      descInput.addEventListener('input', (e) => {
-        templateDesc = e.target.value;
-      });
-      descGroup.appendChild(descInput);
-      tplCard.appendChild(descGroup);
-
-      tplInputSection.appendChild(tplCard);
-      container.appendChild(tplInputSection);
+      if (isTemplateMode || wizardStep === 1) {
+        renderStep1_Items(wizardContent);
+      } else if (wizardStep === 2) {
+        renderStep2_Presentation(wizardContent);
+      } else if (wizardStep === 3) {
+        renderStep3_Export(wizardContent);
+      }
     }
 
-    // =============================================
-    // 3-COLUMN GRID: Catalog (4) + Quote Lines & Summary (8)
-    // =============================================
-    const gridWrapper = document.createElement('div');
-    gridWrapper.className = 'p-6 h-full';
+    // --- STEP 1: Add Items ---
+    function renderStep1_Items(target) {
+      // Installed base
+      installedBaseSectionEl = document.createElement('div');
+      target.appendChild(installedBaseSectionEl);
+      renderInstalledBaseSection();
 
-    const grid = document.createElement('div');
-    grid.className = 'grid grid-cols-12 gap-6 h-full';
-    grid.style.alignItems = 'start';
+      // Template inputs
+      if (isTemplateMode) {
+        const tplInputSection = document.createElement('div');
+        tplInputSection.className = 'p-6 pb-0';
+        const tplCard = document.createElement('div');
+        tplCard.className = 'card p-4 mb-0 grid grid-cols-2 gap-4';
 
-    // Catalog Panel (col-span-4)
-    catalogPanelInstance = createCatalogPanel({
-      licenses,
-      servicePacks,
-      hourlyRate,
-      selectedContainerId,
-      containers,
-      onAddItem: addItem,
-      onAddMeasurePointLicenses: addMeasurePointLicenses,
-      onSelectContainer: selectContainer
-    });
-    grid.appendChild(catalogPanelInstance.element);
+        const nameGroup = document.createElement('div');
+        const nameLabel = document.createElement('label');
+        nameLabel.className = 'text-sm text-secondary mb-1 block';
+        nameLabel.textContent = 'Template Name';
+        nameGroup.appendChild(nameLabel);
+        const nameInp = document.createElement('input');
+        nameInp.value = templateName;
+        nameInp.addEventListener('input', e => { templateName = e.target.value; });
+        nameGroup.appendChild(nameInp);
+        tplCard.appendChild(nameGroup);
 
-    // Right column (col-span-8)
-    const rightCol = document.createElement('div');
-    rightCol.className = 'col-span-8 flex flex-col gap-6';
+        const descGroup = document.createElement('div');
+        const descLabel = document.createElement('label');
+        descLabel.className = 'text-sm text-secondary mb-1 block';
+        descLabel.textContent = 'Description';
+        descGroup.appendChild(descLabel);
+        const descInp = document.createElement('input');
+        descInp.value = templateDesc;
+        descInp.addEventListener('input', e => { templateDesc = e.target.value; });
+        descGroup.appendChild(descInp);
+        tplCard.appendChild(descGroup);
 
-    // Quote Lines Table (flat list)
-    quoteLinesInstance = createQuoteLinesTable({
-      lineItems: config.lineItems,
-      licenses,
-      isTemplateMode,
-      onUpdateItem: updateItem,
-      onRemoveItem: removeItem,
-      onAddDependency: handleAddDependency,
-      referencedInstalledBase,
-      onRemoveInstalledBaseReference: toggleInstalledBaseReference
-    });
-    rightCol.appendChild(quoteLinesInstance.element);
+        tplInputSection.appendChild(tplCard);
+        target.appendChild(tplInputSection);
+      }
 
-    // Summary Card
-    summaryCardInstance = createSummaryCard(config.summary);
-    rightCol.appendChild(summaryCardInstance.element);
+      // Catalog + Quote Lines grid
+      const gridWrapper = document.createElement('div');
+      gridWrapper.className = 'p-6 h-full';
+      const grid = document.createElement('div');
+      grid.className = 'grid grid-cols-12 gap-6 h-full';
+      grid.style.alignItems = 'start';
 
-    grid.appendChild(rightCol);
-    gridWrapper.appendChild(grid);
-    container.appendChild(gridWrapper);
+      catalogPanelInstance = createCatalogPanel({
+        licenses, servicePacks, hourlyRate, selectedContainerId, containers,
+        onAddItem: addItem, onAddMeasurePointLicenses: addMeasurePointLicenses, onSelectContainer: selectContainer
+      });
+      grid.appendChild(catalogPanelInstance.element);
+
+      const rightCol = document.createElement('div');
+      rightCol.className = 'col-span-8 flex flex-col gap-6';
+
+      quoteLinesInstance = createQuoteLinesTable({
+        lineItems: config.lineItems, licenses, isTemplateMode,
+        onUpdateItem: updateItem, onRemoveItem: removeItem,
+        onAddDependency: handleAddDependency, referencedInstalledBase,
+        onRemoveInstalledBaseReference: toggleInstalledBaseReference
+      });
+      rightCol.appendChild(quoteLinesInstance.element);
+
+      summaryCardInstance = createSummaryCard(config.summary);
+      rightCol.appendChild(summaryCardInstance.element);
+
+      grid.appendChild(rightCol);
+      gridWrapper.appendChild(grid);
+      target.appendChild(gridWrapper);
+
+      // Next step button
+      if (!isTemplateMode) {
+        const nextBar = document.createElement('div');
+        nextBar.style.cssText = 'display:flex;justify-content:flex-end;padding:0 1.5rem 1.5rem;';
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'btn btn-primary';
+        nextBtn.textContent = 'Next: Presentation →';
+        nextBtn.addEventListener('click', () => {
+          if (config.lineItems.length === 0) { showToast('Add items first', 'warning'); return; }
+          wizardStep = 2; renderWizardContent(); updateStepBar();
+        });
+        nextBar.appendChild(nextBtn);
+        target.appendChild(nextBar);
+      }
+    }
+
+    // --- STEP 2: Presentation ---
+    function renderStep2_Presentation(target) {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'padding:1.5rem;';
+
+      // Auto-build presentation items if not yet created
+      if (!presentationItems) {
+        presentationItems = buildItemsFromSource(config.lineItems);
+        presentationVersion++;
+      }
+
+      // Inline presentation grid
+      const gridEl = createPresentationGrid({
+        items: presentationItems,
+        lineItems: config.lineItems,
+        licenses,
+        onChange: (items) => {
+          presentationItems = items;
+          presentationVersion++;
+        }
+      });
+      wrap.appendChild(gridEl.element);
+      target.appendChild(wrap);
+
+      // Nav buttons
+      const navBar = document.createElement('div');
+      navBar.style.cssText = 'display:flex;justify-content:space-between;padding:0 1.5rem 1.5rem;';
+      const prevBtn = document.createElement('button');
+      prevBtn.className = 'btn btn-secondary';
+      prevBtn.textContent = '← Back to Items';
+      prevBtn.addEventListener('click', () => { wizardStep = 1; renderWizardContent(); updateStepBar(); });
+      const nextBtn = document.createElement('button');
+      nextBtn.className = 'btn btn-primary';
+      nextBtn.textContent = 'Next: Export →';
+      nextBtn.addEventListener('click', () => { wizardStep = 3; renderWizardContent(); updateStepBar(); });
+      navBar.appendChild(prevBtn);
+      navBar.appendChild(nextBtn);
+      target.appendChild(navBar);
+    }
+
+    // --- STEP 3: Export ---
+    function renderStep3_Export(target) {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'padding:2rem 1.5rem;max-width:600px;margin:0 auto;';
+
+      const heading = document.createElement('h3');
+      heading.style.cssText = 'font-size:1.1rem;margin-bottom:1.5rem;';
+      heading.textContent = 'Export Quote';
+      wrap.appendChild(heading);
+
+      // Summary
+      const summaryEl = createSummaryCard(config.summary);
+      summaryEl.element.style.marginBottom = '1.5rem';
+      wrap.appendChild(summaryEl.element);
+
+      // Export format buttons
+      const exportEl = buildExportContent();
+      exportEl.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px;';
+      wrap.appendChild(exportEl);
+
+      // Nav back
+      const navBar = document.createElement('div');
+      navBar.style.cssText = 'display:flex;justify-content:flex-start;padding-top:1.5rem;';
+      const prevBtn = document.createElement('button');
+      prevBtn.className = 'btn btn-secondary';
+      prevBtn.textContent = '← Back to Presentation';
+      prevBtn.addEventListener('click', () => { wizardStep = 2; renderWizardContent(); updateStepBar(); });
+      navBar.appendChild(prevBtn);
+      wrap.appendChild(navBar);
+      target.appendChild(wrap);
+    }
+
+    renderWizardContent();
   }
 
   // ======================================================
