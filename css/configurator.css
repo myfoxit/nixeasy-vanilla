@@ -1404,6 +1404,15 @@
   padding-left: 8px;
 }
 
+/* Grouped item rows — indented under their header */
+.presentation-grid .grouped-item td:nth-child(3) {
+  padding-left: 28px;
+}
+
+.presentation-grid .grouped-item td:first-child {
+  border-left: 2px solid var(--primary);
+}
+
 /* Item row hover */
 .presentation-grid .item-row:hover td {
   background: #f0f7ff;

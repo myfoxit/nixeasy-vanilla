@@ -659,6 +659,10 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
 
       section.items.forEach(pItem => {
         const tr = createItemRow(pItem, rowIndex);
+        // Indent items that belong to a group (have a header above)
+        if (section.header) {
+          tr.classList.add('grouped-item');
+        }
         tbody.appendChild(tr);
         rowIndex++;
 
