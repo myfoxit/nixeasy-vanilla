@@ -201,56 +201,70 @@ export const exportPresentationToCsv = (presentationItems, config, licenses, fil
     .filter(i => !i.hidden)
     .sort((a, b) => a.order - b.order);
 
-  let grandTotal = 0;
-  let grandMonthly = 0;
-  let inGroup = false;
-  let sectionTotal = 0;
-  let sectionMonthly = 0;
-  let sectionName = '';
+  // Build sections using groupId
+  const headerMap = new Map();
+  visible.filter(i => i.type === 'header').forEach(h => headerMap.set(h.id, { header: h, items: [] }));
 
-  visible.forEach((pItem, idx) => {
-    if (pItem.type === 'header') {
-      // Close previous section with subtotal
-      if (inGroup && sectionTotal > 0) {
-        rows.push(['', '', '', '', '', `Subtotal ${sectionName}:`, sectionTotal.toFixed(2), sectionMonthly.toFixed(2), '']);
-        rows.push([]); // blank line
-      }
-      sectionName = pItem.displayName || 'Section';
-      rows.push([sectionName.toUpperCase(), '', '', '', '', '', '', '', '']);
-      inGroup = true;
-      sectionTotal = 0;
-      sectionMonthly = 0;
-      return;
+  const ungrouped = [];
+  visible.forEach(item => {
+    if (item.type === 'header') return;
+    if (item.groupId && headerMap.has(item.groupId)) {
+      headerMap.get(item.groupId).items.push(item);
+    } else {
+      ungrouped.push(item);
     }
-
-    const r = resolvePresentationItem(pItem, config.lineItems, licenses);
-    grandTotal += r.total;
-    grandMonthly += r.monthly;
-    sectionTotal += r.total;
-    sectionMonthly += r.monthly;
-
-    const isMerged = pItem.sourceIndices && pItem.sourceIndices.length > 1;
-    const indent = inGroup ? '  ' : '';
-    const mergedNote = isMerged ? `[${pItem.sourceIndices.length} items merged]` : '';
-    const note = [r.note, mergedNote].filter(Boolean).join(' ');
-
-    rows.push([
-      indent + r.name,
-      r.sku,
-      r.price.toFixed(2),
-      r.qty,
-      r.margin.toFixed(2),
-      r.slaName,
-      r.total.toFixed(2),
-      r.monthly.toFixed(2),
-      note
-    ]);
   });
 
-  // Close last section
-  if (inGroup && sectionTotal > 0) {
-    rows.push(['', '', '', '', '', `Subtotal ${sectionName}:`, sectionTotal.toFixed(2), sectionMonthly.toFixed(2), '']);
-  }
+  // Build sections in display order
+  const sections = [];
+  let ungroupedRun = [];
+  visible.forEach(item => {
+    if (item.type === 'header') {
+      if (ungroupedRun.length > 0) { sections.push({ header: null, items: ungroupedRun }); ungroupedRun = []; }
+      sections.push(headerMap.get(item.id));
+    } else if (!item.groupId || !headerMap.has(item.groupId)) {
+      ungroupedRun.push(item);
+    }
+  });
+  if (ungroupedRun.length > 0) sections.push({ header: null, items: ungroupedRun });
+
+  let grandTotal = 0;
+  let grandMonthly = 0;
+
+  sections.forEach(section => {
+    if (section.header) {
+      rows.push([section.header.displayName?.toUpperCase() || 'SECTION', '', '', '', '', '', '', '', '']);
+    }
+
+    let sectionTotal = 0;
+    let sectionMonthly = 0;
+
+    section.items.forEach(pItem => {
+      const r = resolvePresentationItem(pItem, config.lineItems, licenses);
+      grandTotal += r.total;
+      grandMonthly += r.monthly;
+      sectionTotal += r.total;
+      sectionMonthly += r.monthly;
+      const indent = section.header ? '  ' : '';
+
+      rows.push([
+        indent + r.name,
+        r.sku,
+        r.price.toFixed(2),
+        r.qty,
+        r.margin.toFixed(2),
+        r.slaName,
+        r.total.toFixed(2),
+        r.monthly.toFixed(2),
+        r.note
+      ]);
+    });
+
+    if (section.header && section.items.length > 0) {
+      rows.push(['', '', '', '', '', `Subtotal ${section.header.displayName || ''}:`, sectionTotal.toFixed(2), sectionMonthly.toFixed(2), '']);
+      rows.push([]);
+    }
+  });
 
   // Grand total
   rows.push([]);
@@ -292,73 +306,71 @@ export const exportPresentationToExcel = (presentationItems, config, licenses, f
     .filter(i => !i.hidden)
     .sort((a, b) => a.order - b.order);
 
+  // Build sections using groupId
+  const headerMap = new Map();
+  visible.filter(i => i.type === 'header').forEach(h => headerMap.set(h.id, { header: h, items: [] }));
+  const ungroupedItems = [];
+  visible.forEach(item => {
+    if (item.type === 'header') return;
+    if (item.groupId && headerMap.has(item.groupId)) {
+      headerMap.get(item.groupId).items.push(item);
+    } else {
+      ungroupedItems.push(item);
+    }
+  });
+  const sections = [];
+  let ungroupedRun = [];
+  visible.forEach(item => {
+    if (item.type === 'header') {
+      if (ungroupedRun.length > 0) { sections.push({ header: null, items: ungroupedRun }); ungroupedRun = []; }
+      sections.push(headerMap.get(item.id));
+    } else if (!item.groupId || !headerMap.has(item.groupId)) {
+      ungroupedRun.push(item);
+    }
+  });
+  if (ungroupedRun.length > 0) sections.push({ header: null, items: ungroupedRun });
+
   const startRow = 4;
   let dataRowCount = 0;
   const dataRowIndices = [];
-  const headerRowIndices = [];
-  const subtotalRowIndices = [];
-  let inGroup = false;
-  let sectionStartRow = 0;
-  let sectionItemRows = [];
 
-  function addSubtotal(sectionName) {
-    if (sectionItemRows.length > 0) {
+  sections.forEach(section => {
+    if (section.header) {
+      if (dataRowCount > 0) { wsData.push([]); dataRowCount++; }
+      wsData.push([section.header.displayName || 'Section', '', '', '', '', '', '', '', '']);
+      dataRowCount++;
+    }
+
+    const sectionItemRows = [];
+    section.items.forEach(pItem => {
+      const r = resolvePresentationItem(pItem, config.lineItems, licenses);
+      const curRow = startRow + dataRowCount;
+      dataRowIndices.push(curRow);
+      sectionItemRows.push(curRow);
+      const indent = section.header ? '    ' : '';
+
+      wsData.push([
+        indent + r.name,
+        r.sku,
+        r.price,
+        r.qty,
+        r.margin,
+        r.slaPct,
+        { f: `C${curRow}*D${curRow}*(1+E${curRow}/100)` },
+        { f: `G${curRow}*(F${curRow}/100)` },
+        r.note
+      ]);
+      dataRowCount++;
+    });
+
+    if (section.header && sectionItemRows.length > 0) {
       const excelRow = startRow + dataRowCount;
       const vkFormula = sectionItemRows.map(r => `G${r}`).join('+');
       const moFormula = sectionItemRows.map(r => `H${r}`).join('+');
-      wsData.push(['', '', '', '', '', `Subtotal ${sectionName}:`, { f: vkFormula }, { f: moFormula }, '']);
-      subtotalRowIndices.push(excelRow);
+      wsData.push(['', '', '', '', '', `Subtotal ${section.header.displayName || ''}:`, { f: vkFormula }, { f: moFormula }, '']);
       dataRowCount++;
     }
-  }
-
-  visible.forEach(pItem => {
-    const excelRow = startRow + dataRowCount;
-
-    if (pItem.type === 'header') {
-      // Close previous section
-      if (inGroup) addSubtotal(wsData[sectionStartRow - 1]?.[0] || '');
-
-      // Add blank row before group (except first)
-      if (dataRowCount > 0) { wsData.push([]); dataRowCount++; }
-
-      headerRowIndices.push(startRow + dataRowCount);
-      wsData.push([pItem.displayName || 'Section', '', '', '', '', '', '', '', '']);
-      dataRowCount++;
-      inGroup = true;
-      sectionStartRow = startRow + dataRowCount;
-      sectionItemRows = [];
-      return;
-    }
-
-    const r = resolvePresentationItem(pItem, config.lineItems, licenses);
-    const curRow = startRow + dataRowCount;
-    dataRowIndices.push(curRow);
-    if (inGroup) sectionItemRows.push(curRow);
-
-    const isMerged = pItem.sourceIndices && pItem.sourceIndices.length > 1;
-    const indent = inGroup ? '    ' : '';
-    const mergedNote = isMerged ? `[${pItem.sourceIndices.length} merged]` : '';
-    const note = [r.note, mergedNote].filter(Boolean).join(' ');
-
-    wsData.push([
-      indent + r.name,
-      r.sku,
-      r.price,
-      r.qty,
-      r.margin,
-      r.slaPct,
-      { f: `C${curRow}*D${curRow}*(1+E${curRow}/100)` },
-      { f: `G${curRow}*(F${curRow}/100)` },
-      note
-    ]);
-    dataRowCount++;
   });
-
-  // Close last section
-  if (inGroup) addSubtotal(visible.filter(i => i.type === 'header').pop()?.displayName || '');
-
-  const lastDataRow = startRow + dataRowCount - 1;
 
   // Grand total
   wsData.push([]);
