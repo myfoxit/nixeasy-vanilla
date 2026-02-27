@@ -1348,8 +1348,8 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
       return;
     }
 
-    const groupName = prompt('Enter group name:');
-    if (!groupName) return;
+    // Inline rename: create header with default name, user can click to rename
+    const groupName = 'New Group';
 
     // Insert header above the first selected item
     const firstOrder = selItems[0].order;
