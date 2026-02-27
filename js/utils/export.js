@@ -203,19 +203,39 @@ export const exportPresentationToCsv = (presentationItems, config, licenses, fil
 
   let grandTotal = 0;
   let grandMonthly = 0;
+  let inGroup = false;
+  let sectionTotal = 0;
+  let sectionMonthly = 0;
+  let sectionName = '';
 
-  visible.forEach(pItem => {
+  visible.forEach((pItem, idx) => {
     if (pItem.type === 'header') {
-      rows.push([`--- ${pItem.displayName || 'Section'} ---`, '', '', '', '', '', '', '', '']);
+      // Close previous section with subtotal
+      if (inGroup && sectionTotal > 0) {
+        rows.push(['', '', '', '', '', `Subtotal ${sectionName}:`, sectionTotal.toFixed(2), sectionMonthly.toFixed(2), '']);
+        rows.push([]); // blank line
+      }
+      sectionName = pItem.displayName || 'Section';
+      rows.push([sectionName.toUpperCase(), '', '', '', '', '', '', '', '']);
+      inGroup = true;
+      sectionTotal = 0;
+      sectionMonthly = 0;
       return;
     }
 
     const r = resolvePresentationItem(pItem, config.lineItems, licenses);
     grandTotal += r.total;
     grandMonthly += r.monthly;
+    sectionTotal += r.total;
+    sectionMonthly += r.monthly;
+
+    const isMerged = pItem.sourceIndices && pItem.sourceIndices.length > 1;
+    const indent = inGroup ? '  ' : '';
+    const mergedNote = isMerged ? `[${pItem.sourceIndices.length} items merged]` : '';
+    const note = [r.note, mergedNote].filter(Boolean).join(' ');
 
     rows.push([
-      r.name,
+      indent + r.name,
       r.sku,
       r.price.toFixed(2),
       r.qty,
@@ -223,14 +243,19 @@ export const exportPresentationToCsv = (presentationItems, config, licenses, fil
       r.slaName,
       r.total.toFixed(2),
       r.monthly.toFixed(2),
-      r.note
+      note
     ]);
   });
 
-  // Summary
+  // Close last section
+  if (inGroup && sectionTotal > 0) {
+    rows.push(['', '', '', '', '', `Subtotal ${sectionName}:`, sectionTotal.toFixed(2), sectionMonthly.toFixed(2), '']);
+  }
+
+  // Grand total
   rows.push([]);
-  rows.push(['', '', '', '', '', '', 'Total (VK):', grandTotal.toFixed(2), '']);
-  rows.push(['', '', '', '', '', '', 'Monthly:', grandMonthly.toFixed(2), '']);
+  rows.push(['', '', '', '', '', 'GRAND TOTAL (VK):', grandTotal.toFixed(2), '', '']);
+  rows.push(['', '', '', '', '', 'GRAND TOTAL Monthly:', '', grandMonthly.toFixed(2), '']);
 
   const csvContent = [
     headers.join(';'),
@@ -258,7 +283,7 @@ export const exportPresentationToExcel = (presentationItems, config, licenses, f
 
   const wb = XLSX.utils.book_new();
   const wsData = [
-    ['Quote Export (Presentation)', '', '', '', '', '', '', '', ''],
+    ['Quote Export', '', '', '', '', '', '', '', ''],
     ['', '', '', '', '', '', '', '', ''],
     ['Item Name', 'SKU', 'Unit Price', 'Quantity', 'Margin %', 'SLA %', 'Line Total (VK)', 'Monthly', 'Notes'],
   ];
@@ -269,41 +294,79 @@ export const exportPresentationToExcel = (presentationItems, config, licenses, f
 
   const startRow = 4;
   let dataRowCount = 0;
-  const dataRowIndices = []; // Excel row numbers for item rows (for summary formulas)
+  const dataRowIndices = [];
+  const headerRowIndices = [];
+  const subtotalRowIndices = [];
+  let inGroup = false;
+  let sectionStartRow = 0;
+  let sectionItemRows = [];
+
+  function addSubtotal(sectionName) {
+    if (sectionItemRows.length > 0) {
+      const excelRow = startRow + dataRowCount;
+      const vkFormula = sectionItemRows.map(r => `G${r}`).join('+');
+      const moFormula = sectionItemRows.map(r => `H${r}`).join('+');
+      wsData.push(['', '', '', '', '', `Subtotal ${sectionName}:`, { f: vkFormula }, { f: moFormula }, '']);
+      subtotalRowIndices.push(excelRow);
+      dataRowCount++;
+    }
+  }
 
   visible.forEach(pItem => {
     const excelRow = startRow + dataRowCount;
 
     if (pItem.type === 'header') {
-      wsData.push([`--- ${pItem.displayName || 'Section'} ---`, '', '', '', '', '', '', '', '']);
+      // Close previous section
+      if (inGroup) addSubtotal(wsData[sectionStartRow - 1]?.[0] || '');
+
+      // Add blank row before group (except first)
+      if (dataRowCount > 0) { wsData.push([]); dataRowCount++; }
+
+      headerRowIndices.push(startRow + dataRowCount);
+      wsData.push([pItem.displayName || 'Section', '', '', '', '', '', '', '', '']);
       dataRowCount++;
+      inGroup = true;
+      sectionStartRow = startRow + dataRowCount;
+      sectionItemRows = [];
       return;
     }
 
     const r = resolvePresentationItem(pItem, config.lineItems, licenses);
-    dataRowIndices.push(excelRow);
+    const curRow = startRow + dataRowCount;
+    dataRowIndices.push(curRow);
+    if (inGroup) sectionItemRows.push(curRow);
+
+    const isMerged = pItem.sourceIndices && pItem.sourceIndices.length > 1;
+    const indent = inGroup ? '    ' : '';
+    const mergedNote = isMerged ? `[${pItem.sourceIndices.length} merged]` : '';
+    const note = [r.note, mergedNote].filter(Boolean).join(' ');
 
     wsData.push([
-      r.name,
+      indent + r.name,
       r.sku,
       r.price,
       r.qty,
       r.margin,
       r.slaPct,
-      { f: `C${excelRow}*D${excelRow}*(1+E${excelRow}/100)` },
-      { f: `G${excelRow}*(F${excelRow}/100)` },
-      r.note
+      { f: `C${curRow}*D${curRow}*(1+E${curRow}/100)` },
+      { f: `G${curRow}*(F${curRow}/100)` },
+      note
     ]);
     dataRowCount++;
   });
 
+  // Close last section
+  if (inGroup) addSubtotal(visible.filter(i => i.type === 'header').pop()?.displayName || '');
+
   const lastDataRow = startRow + dataRowCount - 1;
 
-  // Summary
+  // Grand total
   wsData.push([]);
   if (dataRowIndices.length > 0) {
-    wsData.push(['', '', '', '', '', 'VK Total:', { f: `SUM(G${startRow}:G${lastDataRow})` }, '', '']);
-    wsData.push(['', '', '', '', '', 'Monthly Total:', '', { f: `SUM(H${startRow}:H${lastDataRow})` }, '']);
+    const vkFormula = dataRowIndices.map(r => `G${r}`).join('+');
+    const moFormula = dataRowIndices.map(r => `H${r}`).join('+');
+    wsData.push(['', '', '', '', '', 'GRAND TOTAL (VK):', { f: vkFormula }, '', '']);
+    wsData.push(['', '', '', '', '', 'Monthly Total:', '', { f: moFormula }, '']);
   }
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);

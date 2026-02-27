@@ -5,6 +5,7 @@
 
 import { pb } from '../api.js';
 import { navigate } from '../router.js';
+import { setRouteState } from '../app.js';
 import { createDataTable } from '../components/data-table.js';
 import { showConfirmModal } from '../components/modal.js';
 import { showToast } from '../components/toast.js';
@@ -155,10 +156,8 @@ export function createCustomersView(container) {
     },
     onRowClick: (c) => {
       // Navigate to opportunities filtered by this customer
+      setRouteState({ customerId: c.id, customerName: c.name });
       navigate('/opportunities');
-      // We need to pass filter state. Since we use hash routing, we store
-      // the filter in a simple global so the opportunities view can pick it up.
-      window.__nixeasyRouteState = { filterCustomerId: c.id, filterCustomerName: c.name };
     },
     sortColumn,
     sortDirection,

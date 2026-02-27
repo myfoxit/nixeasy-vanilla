@@ -35,8 +35,8 @@ export function createOpportunitiesView(container, params = {}) {
   let sortDirection = null;
 
   // Customer filter (can come from navigation state, e.g. from Customers view)
-  let customerId = params.filterCustomerId || undefined;
-  let customerName = params.filterCustomerName || undefined;
+  let customerId = params.customerId || params.filterCustomerId || undefined;
+  let customerName = params.customerName || params.filterCustomerName || undefined;
 
   // Track sub-components for cleanup
   let selectInstance = null;

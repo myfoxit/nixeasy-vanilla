@@ -142,10 +142,7 @@ function registerRoutes(main) {
   // Opportunities
   addRoute('/opportunities', (container) => {
     const state = consumeRouteState();
-    return createOpportunitiesView(container, {
-      filterCustomerId: state.customerId,
-      filterCustomerName: state.customerName,
-    });
+    return createOpportunitiesView(container, state);
   });
 
   // All Quotes
