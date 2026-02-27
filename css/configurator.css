@@ -1406,7 +1406,7 @@
 
 /* Grouped item rows — indented under their header */
 .presentation-grid .grouped-item td:nth-child(3) {
-  padding-left: 28px;
+  padding-left: 44px;
 }
 
 .presentation-grid .grouped-item td:first-child {

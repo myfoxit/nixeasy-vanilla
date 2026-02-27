@@ -664,9 +664,6 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
         const tr = createItemRow(pItem, rowIndex);
         if (section.header) {
           tr.classList.add('grouped-item');
-          // Indent the name cell directly
-          const nameCell = tr.querySelector('td:nth-child(3)');
-          if (nameCell) nameCell.style.paddingLeft = '36px';
           // Hide if group is collapsed
           if (isCollapsed) tr.style.display = 'none';
         }
@@ -1434,8 +1431,18 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     // Inline rename: create header with default name, user can click to rename
     const groupName = 'New Group';
 
-    // Insert header above the first selected item
+    // Determine the range occupied by selected items
     const firstOrder = selItems[0].order;
+    const lastOrder = selItems[selItems.length - 1].order;
+
+    // Find non-selected, non-header items sitting between first and last selected
+    const selIdSet = new Set(selIds);
+    const trapped = state.items.filter(
+      i => !selIdSet.has(i.id) && i.type !== 'header' && !i.hidden &&
+           i.order > firstOrder && i.order < lastOrder
+    );
+
+    // Insert header above the first selected item
     const header = {
       id: generateId(),
       sourceIndices: [],
@@ -1450,9 +1457,14 @@ export function createPresentationGrid({ items, lineItems, licenses, onChange })
     };
     state.items.push(header);
 
-    // Move selected items to be contiguous after the header
+    // Place selected items contiguously after the header
     selItems.forEach((item, idx) => {
       item.order = firstOrder + idx * 0.1;
+    });
+
+    // Push trapped non-selected items after the last selected item
+    trapped.forEach((item, idx) => {
+      item.order = lastOrder + 1 + idx * 0.1;
     });
 
     selectedRows.clear();
