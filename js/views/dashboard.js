@@ -62,26 +62,38 @@ export function createDashboardView(container) {
 
   // ─── Chart Theme ──────────────────────────────────────────────
 
+  // Monochromatic indigo palette — shades, tints, and opacities of the primary
   const COLORS = {
     primary: '#4f46e5',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#06b6d4',
-    purple: '#8b5cf6',
-    pink: '#ec4899',
-    orange: '#f97316',
-    palette: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#f97316', '#84cc16', '#14b8a6'],
+    // Shades from dark to light
+    indigo900: '#312e81',
+    indigo800: '#3730a3',
+    indigo700: '#4338ca',
+    indigo600: '#4f46e5',
+    indigo500: '#6366f1',
+    indigo400: '#818cf8',
+    indigo300: '#a5b4fc',
+    indigo200: '#c7d2fe',
+    indigo100: '#e0e7ff',
+    indigo50:  '#eef2ff',
+    // Semantic — all mapped to indigo range + a couple accent neutrals
+    success: '#4f46e5',   // won = strong primary
+    danger:  '#a5b4fc',   // lost = light tint (de-emphasized)
+    neutral: '#c7d2fe',
+    muted:   '#e0e7ff',
+    // Palette for multi-series (8 distinct indigo shades)
+    palette: ['#312e81', '#3730a3', '#4338ca', '#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#eef2ff'],
+    // Pipeline status — graduated indigo shades (dark = early, bright = won, muted = lost/hold)
     status: {
-      'NEW': '#4f46e5',
-      'CALCULATED': '#3b82f6',
-      'QUOTE SEND': '#06b6d4',
-      'IN PROGRESS': '#f59e0b',
-      'ORDERED': '#8b5cf6',
-      'WON': '#10b981',
-      'LOST': '#ef4444',
-      'ON HOLD': '#9ca3af',
-      'STORNO': '#6b7280',
+      'NEW':         '#4f46e5',
+      'CALCULATED':  '#4338ca',
+      'QUOTE SEND':  '#6366f1',
+      'IN PROGRESS': '#818cf8',
+      'ORDERED':     '#a5b4fc',
+      'WON':         '#312e81',
+      'LOST':        '#c7d2fe',
+      'ON HOLD':     '#e0e7ff',
+      'STORNO':      '#e0e7ff',
     }
   };
 
@@ -166,12 +178,12 @@ export function createDashboardView(container) {
     const winRate = (wonCount + lostCount) > 0 ? ((wonCount / (wonCount + lostCount)) * 100).toFixed(0) : '—';
     const avgDeal = wonCount > 0 ? wonRevenue / wonCount : 0;
 
-    kpiRow.appendChild(kpiCard('Pipeline Value', shortCurrency(totalPipeline), `${opps.filter(o => !['WON', 'LOST', 'STORNO'].includes(o.status)).length} open deals`, COLORS.primary));
-    kpiRow.appendChild(kpiCard('Won Revenue', shortCurrency(wonRevenue), `${wonCount} deals closed`, COLORS.success));
-    kpiRow.appendChild(kpiCard('Monthly Recurring', shortCurrency(mrr), 'Active contracts', COLORS.info));
-    kpiRow.appendChild(kpiCard('Win Rate', `${winRate}%`, `${wonCount}W / ${lostCount}L`, COLORS.warning));
-    kpiRow.appendChild(kpiCard('Avg Deal Size', shortCurrency(avgDeal), `From ${wonCount} won deals`, COLORS.purple));
-    kpiRow.appendChild(kpiCard('Total Quotes', quotes.length.toString(), `Across all opportunities`, COLORS.pink));
+    kpiRow.appendChild(kpiCard('Pipeline Value', shortCurrency(totalPipeline), `${opps.filter(o => !['WON', 'LOST', 'STORNO'].includes(o.status)).length} open deals`, COLORS.indigo600));
+    kpiRow.appendChild(kpiCard('Won Revenue', shortCurrency(wonRevenue), `${wonCount} deals closed`, COLORS.indigo700));
+    kpiRow.appendChild(kpiCard('Monthly Recurring', shortCurrency(mrr), 'Active contracts', COLORS.indigo500));
+    kpiRow.appendChild(kpiCard('Win Rate', `${winRate}%`, `${wonCount}W / ${lostCount}L`, COLORS.indigo800));
+    kpiRow.appendChild(kpiCard('Avg Deal Size', shortCurrency(avgDeal), `From ${wonCount} won deals`, COLORS.indigo400));
+    kpiRow.appendChild(kpiCard('Total Quotes', quotes.length.toString(), `Across all opportunities`, COLORS.indigo300));
     page.appendChild(kpiRow);
 
     // ─── Row 1: Pipeline by Status + Revenue Over Time ──────
@@ -197,7 +209,7 @@ export function createDashboardView(container) {
           labels: statusKeys,
           datasets: [{
             data: statusKeys.map(s => statusGroups[s].capex),
-            backgroundColor: statusKeys.map(s => COLORS.status[s] || '#9ca3af'),
+            backgroundColor: statusKeys.map(s => COLORS.status[s] || COLORS.indigo200),
             borderRadius: 6,
             maxBarThickness: 36,
           }],
@@ -247,24 +259,27 @@ export function createDashboardView(container) {
             {
               label: 'CAPEX',
               data: monthKeys.map(k => monthGroups[k].capex),
-              borderColor: COLORS.primary,
-              backgroundColor: COLORS.primary + '15',
+              borderColor: COLORS.indigo700,
+              backgroundColor: COLORS.indigo700 + '18',
               fill: true,
               tension: 0.35,
-              pointRadius: 2,
-              pointHoverRadius: 5,
-              borderWidth: 2,
+              pointRadius: 3,
+              pointHoverRadius: 6,
+              pointBackgroundColor: COLORS.indigo700,
+              borderWidth: 2.5,
             },
             {
               label: 'OPEX (monthly)',
               data: monthKeys.map(k => monthGroups[k].opex),
-              borderColor: COLORS.success,
-              backgroundColor: COLORS.success + '15',
+              borderColor: COLORS.indigo400,
+              backgroundColor: COLORS.indigo400 + '18',
               fill: true,
               tension: 0.35,
-              pointRadius: 2,
-              pointHoverRadius: 5,
+              pointRadius: 3,
+              pointHoverRadius: 6,
+              pointBackgroundColor: COLORS.indigo400,
               borderWidth: 2,
+              borderDash: [5, 3],
             },
           ],
         },
@@ -294,7 +309,7 @@ export function createDashboardView(container) {
     const winBox = chartCard('Win / Loss', 'span-3');
     const wlData = [wonCount, lostCount, opps.length - wonCount - lostCount];
     const wlLabels = ['Won', 'Lost', 'Open'];
-    const wlColors = [COLORS.success, COLORS.danger, '#e2e8f0'];
+    const wlColors = [COLORS.indigo900, COLORS.indigo300, COLORS.indigo100];
     if (opps.length > 0) {
       const canvas = el('canvas');
       winBox.body.appendChild(canvas);
@@ -335,7 +350,11 @@ export function createDashboardView(container) {
           labels: topCust.map(([n]) => n.length > 18 ? n.slice(0, 18) + '…' : n),
           datasets: [{
             data: topCust.map(([, v]) => v),
-            backgroundColor: COLORS.palette.slice(0, topCust.length),
+            backgroundColor: topCust.map((_, i) => {
+              // Graduated: darkest for #1, lighter for lower ranks
+              const shades = [COLORS.indigo900, COLORS.indigo800, COLORS.indigo700, COLORS.indigo600, COLORS.indigo500, COLORS.indigo400, COLORS.indigo300, COLORS.indigo200];
+              return shades[i] || COLORS.indigo200;
+            }),
             borderRadius: 4,
             maxBarThickness: 28,
           }],
@@ -367,17 +386,19 @@ export function createDashboardView(container) {
         const row = el('div');
         row.style.cssText = 'display:flex;align-items:center;gap:10px;';
         const lbl = el('div');
-        lbl.style.cssText = 'width:90px;text-align:right;font-size:0.7rem;font-weight:500;color:var(--text-secondary);white-space:nowrap;';
+        lbl.style.cssText = 'width:100px;text-align:right;font-size:0.7rem;font-weight:500;color:var(--text-secondary);white-space:nowrap;';
         lbl.textContent = stage.label;
         const barOuter = el('div');
-        barOuter.style.cssText = 'flex:1;height:26px;background:var(--border);border-radius:4px;overflow:hidden;position:relative;';
+        barOuter.style.cssText = 'flex:1;height:30px;background:' + COLORS.indigo50 + ';border-radius:6px;overflow:hidden;position:relative;';
+        const pctW = Math.max((stage.count / maxC) * 100, 8);
         const barInner = el('div');
-        barInner.style.cssText = `width:${Math.max((stage.count / maxC) * 100, 3)}%;height:100%;background:${stage.color};border-radius:4px;transition:width 0.6s ease;`;
-        const info = el('span');
-        info.style.cssText = 'position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:0.65rem;color:var(--text-secondary);font-weight:500;';
-        info.textContent = `${stage.count} · ${shortCurrency(stage.capex)}`;
+        barInner.style.cssText = `width:${pctW}%;height:100%;background:${stage.color};border-radius:6px;transition:width 0.6s ease;display:flex;align-items:center;padding:0 10px;`;
+        // Label inside bar
+        const barLabel = el('span');
+        barLabel.style.cssText = 'font-size:0.7rem;font-weight:600;color:#fff;white-space:nowrap;';
+        barLabel.textContent = `${stage.count} · ${shortCurrency(stage.capex)}`;
+        barInner.appendChild(barLabel);
         barOuter.appendChild(barInner);
-        barOuter.appendChild(info);
         row.appendChild(lbl);
         row.appendChild(barOuter);
         funnelEl.appendChild(row);
@@ -411,8 +432,8 @@ export function createDashboardView(container) {
           datasets: [{
             label: 'Quotes',
             data: quoteValues.map(q => ({ x: q.capex, y: q.opex })),
-            backgroundColor: COLORS.primary + '60',
-            borderColor: COLORS.primary,
+            backgroundColor: COLORS.indigo500 + '50',
+            borderColor: COLORS.indigo600,
             borderWidth: 1.5,
             pointRadius: 6,
             pointHoverRadius: 8,
@@ -455,8 +476,10 @@ export function createDashboardView(container) {
           datasets: [{
             data: expiryKeys.map(k => expiryGroups[k]),
             backgroundColor: expiryKeys.map((_, i) => {
-              const r = i / expiryKeys.length;
-              return r < 0.3 ? COLORS.danger + 'cc' : r < 0.6 ? COLORS.warning + 'cc' : COLORS.success + 'cc';
+              // Nearer months = darker indigo (more urgent), further = lighter
+              const r = i / Math.max(expiryKeys.length - 1, 1);
+              const shades = [COLORS.indigo900, COLORS.indigo800, COLORS.indigo700, COLORS.indigo600, COLORS.indigo500, COLORS.indigo400, COLORS.indigo300];
+              return shades[Math.min(Math.floor(r * shades.length), shades.length - 1)];
             }),
             borderRadius: 6,
             maxBarThickness: 32,
@@ -495,7 +518,7 @@ export function createDashboardView(container) {
         tr.innerHTML = `
           <td style="font-weight:500;">${o.title || `#${o.opportunity}`}</td>
           <td style="color:var(--text-secondary)">${o.expand?.customer?.name || '—'}</td>
-          <td><span class="dash-status-badge" style="background:${statusColor}15;color:${statusColor};border:1px solid ${statusColor}30;">${o.status}</span></td>
+          <td><span class="dash-status-badge" style="background:${statusColor}18;color:${statusColor};border:1px solid ${statusColor}35;">${o.status}</span></td>
           <td style="text-align:right;font-variant-numeric:tabular-nums;">${currency(Number(o.capex) || 0)}</td>
           <td style="text-align:right;font-variant-numeric:tabular-nums;">${currency(Number(o.opex_monthly) || 0)}</td>
           <td style="color:var(--text-secondary);font-size:0.8rem;">${new Date(o.created).toLocaleDateString('de-DE')}</td>`;
@@ -521,10 +544,9 @@ export function createDashboardView(container) {
   function kpiCard(title, value, subtitle, color) {
     const card = el('div', 'dash-kpi');
     card.innerHTML = `
-      <div class="dash-kpi-accent" style="background:${color}"></div>
       <div class="dash-kpi-content">
         <div class="dash-kpi-label">${title}</div>
-        <div class="dash-kpi-value">${value}</div>
+        <div class="dash-kpi-value" style="color:${color}">${value}</div>
         <div class="dash-kpi-sub">${subtitle}</div>
       </div>`;
     return card;

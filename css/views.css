@@ -465,17 +465,16 @@
 .dash-btn-group { display:flex; background:var(--bg-secondary); border-radius:8px; padding:2px; gap:1px; }
 .dash-btn { padding:6px 12px; border:none; background:transparent; border-radius:6px; font-size:0.75rem; font-weight:500; color:var(--text-secondary); cursor:pointer; transition:all 0.15s; }
 .dash-btn:hover { color:var(--text-primary); background:rgba(0,0,0,0.04); }
-.dash-btn.active { background:#fff; color:var(--text-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+.dash-btn.active { background:#fff; color:#4f46e5; font-weight:600; box-shadow:0 1px 3px rgba(79,70,229,0.15); }
 
 /* KPI Row */
 .dash-kpi-row { display:grid; grid-template-columns:repeat(6,1fr); gap:16px; margin-bottom:20px; }
-.dash-kpi { background:#fff; border:1px solid var(--border); border-radius:12px; padding:0; display:flex; overflow:hidden; transition:box-shadow 0.15s; }
-.dash-kpi:hover { box-shadow:0 2px 8px rgba(0,0,0,0.06); }
-.dash-kpi-accent { width:4px; flex-shrink:0; }
-.dash-kpi-content { padding:14px 16px; }
-.dash-kpi-label { font-size:0.68rem; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-secondary); margin-bottom:6px; }
-.dash-kpi-value { font-size:1.35rem; font-weight:700; color:var(--text-primary); line-height:1.2; font-variant-numeric:tabular-nums; }
-.dash-kpi-sub { font-size:0.7rem; color:var(--text-secondary); margin-top:4px; }
+.dash-kpi { background:#fff; border:1px solid var(--border); border-radius:12px; padding:0; display:flex; overflow:hidden; transition:box-shadow 0.15s, border-color 0.15s; }
+.dash-kpi:hover { box-shadow:0 4px 12px rgba(79,70,229,0.08); border-color: #c7d2fe; }
+.dash-kpi-content { padding:16px 20px; }
+.dash-kpi-label { font-size:0.68rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:#6b7280; margin-bottom:8px; }
+.dash-kpi-value { font-size:1.5rem; font-weight:700; line-height:1.2; font-variant-numeric:tabular-nums; }
+.dash-kpi-sub { font-size:0.72rem; color:var(--text-secondary); margin-top:6px; }
 
 /* Chart Grid */
 .dash-row { display:grid; grid-template-columns:repeat(12,1fr); gap:16px; margin-bottom:20px; }
@@ -488,7 +487,8 @@
 .span-12 { grid-column:span 12; }
 
 /* Chart Cards */
-.dash-chart-card { background:#fff; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.dash-chart-card { background:#fff; border:1px solid var(--border); border-radius:12px; overflow:hidden; transition:box-shadow 0.15s, border-color 0.15s; }
+.dash-chart-card:hover { box-shadow:0 4px 12px rgba(79,70,229,0.06); border-color:#e0e7ff; }
 .dash-chart-header { padding:14px 18px 0; }
 .dash-chart-header h3 { font-size:0.82rem; font-weight:600; color:var(--text-primary); margin:0; }
 .dash-chart-body { padding:12px 16px 16px; height:240px; position:relative; }
