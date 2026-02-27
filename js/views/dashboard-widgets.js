@@ -1,126 +1,93 @@
 // Dashboard Widget Rendering
-// Handles data fetching, caching, aggregation, Chart.js integration,
-// and per-widget rendering for all supported widget types.
+// Fetches data, processes metrics, renders charts via Chart.js
 
-import { pb } from '../api.js';
-import { currency } from '../utils/format.js';
+import { getApi } from '../api.js';
 import { COLOR_SCHEMES, STATUS_COLORS } from './dashboard-config.js';
 
-// ==========================================================================
-// Data Cache (60-second TTL)
-// ==========================================================================
-const _cache = {};
+const pb = getApi();
+const dataCache = new Map();
 const CACHE_TTL = 60_000;
+const chartInstances = new Map();
 
-async function cachedFetch(key, fetchFn) {
-  const now = Date.now();
-  if (_cache[key] && (now - _cache[key].ts) < CACHE_TTL) {
-    return _cache[key].data;
-  }
-  const data = await fetchFn();
-  _cache[key] = { data, ts: now };
+// ─── Data Fetching ─────────────────────────────────────────────
+
+async function cachedFetch(key, fetcher) {
+  const cached = dataCache.get(key);
+  if (cached && Date.now() - cached.time < CACHE_TTL) return cached.data;
+  const data = await fetcher();
+  dataCache.set(key, { data, time: Date.now() });
   return data;
 }
 
-export function clearCache() {
-  for (const k of Object.keys(_cache)) delete _cache[k];
-}
-
-// ==========================================================================
-// Data Fetchers
-// ==========================================================================
-function fetchOpportunities() {
-  return cachedFetch('opportunities', async () => {
+async function fetchCollection(name, opts = {}) {
+  return cachedFetch(name + JSON.stringify(opts), async () => {
     try {
-      return await pb.collection('opportunities').getFullList({ expand: 'customer' });
+      return await pb.collection(name).getFullList(opts);
     } catch (e) {
-      console.warn('Failed to fetch opportunities with expand, trying without:', e.message);
-      return await pb.collection('opportunities').getFullList();
+      console.warn(`[dashboard] fetch ${name} failed:`, e.message);
+      return [];
     }
   });
 }
 
-function fetchQuotes() {
-  return cachedFetch('quotes', () =>
-    pb.collection('quotes').getFullList()
-  );
+function getRecords(source) {
+  switch (source) {
+    case 'opportunities': return fetchCollection('opportunities', { expand: 'customer' });
+    case 'quotes': return fetchCollection('quotes');
+    case 'installed_base': return fetchCollection('installed_base', { expand: 'customer,license' });
+    case 'licenses': return fetchCollection('licenses');
+    default: return Promise.resolve([]);
+  }
 }
 
-function fetchInstalledBase() {
-  return cachedFetch('installed_base', async () => {
-    try {
-      return await pb.collection('installed_base').getFullList({ expand: 'customer,license' });
-    } catch (e) {
-      console.warn('Failed to fetch installed_base with expand, trying without:', e.message);
-      return await pb.collection('installed_base').getFullList();
-    }
-  });
-}
+// ─── Time Filtering ────────────────────────────────────────────
 
-function fetchLicenses() {
-  return cachedFetch('licenses', () =>
-    pb.collection('licenses').getFullList()
-  );
-}
-
-function getDataFetcher(source) {
-  const map = {
-    opportunities: fetchOpportunities,
-    quotes: fetchQuotes,
-    installed_base: fetchInstalledBase,
-    licenses: fetchLicenses,
-  };
-  return map[source] || fetchOpportunities;
-}
-
-// ==========================================================================
-// Filtering
-// ==========================================================================
-function filterByTimeRange(records, timeRange, dateField = 'created') {
+function filterByTime(records, timeRange) {
   if (!timeRange || timeRange === 'all') return records;
   const now = Date.now();
-  const days = { '7d': 7, '30d': 30, '90d': 90, '1y': 365 };
-  const d = days[timeRange];
-  if (!d) return records;
-  const cutoff = now - d * 86_400_000;
-  return records.filter(r => new Date(r[dateField]).getTime() >= cutoff);
+  const cutoffs = { '7d': 7, '30d': 30, '90d': 90, '1y': 365 };
+  const days = cutoffs[timeRange];
+  if (!days) return records;
+  const cutoff = now - days * 86400_000;
+  return records.filter(r => {
+    const d = new Date(r.created || r.installed_on || 0);
+    return d.getTime() >= cutoff;
+  });
 }
 
-function applyStatusFilters(records, filters) {
+// ─── Status Filtering ──────────────────────────────────────────
+
+function filterByStatus(records, filters) {
   if (!filters) return records;
   let result = records;
-  if (filters.status) {
-    const allowed = Array.isArray(filters.status) ? filters.status : [filters.status];
-    result = result.filter(r => allowed.includes(r.status));
+  if (filters.status && filters.status.length > 0) {
+    result = result.filter(r => filters.status.includes(r.status));
   }
-  if (filters.statusNot) {
-    const excluded = Array.isArray(filters.statusNot) ? filters.statusNot : [filters.statusNot];
-    result = result.filter(r => !excluded.includes(r.status));
+  if (filters.statusNot && filters.statusNot.length > 0) {
+    result = result.filter(r => !filters.statusNot.includes(r.status));
   }
   return result;
 }
 
-// ==========================================================================
-// Metric Calculation
-// ==========================================================================
-function calculateMetric(records, metric) {
+// ─── Metric Calculation ────────────────────────────────────────
+
+function calcMetric(records, metric) {
+  if (!records || records.length === 0) return 0;
   switch (metric) {
-    case 'count':     return records.length;
-    case 'sum_capex': return records.reduce((s, r) => s + (r.capex || 0), 0);
-    case 'sum_opex':  return records.reduce((s, r) => s + (r.opex_monthly || 0), 0);
-    case 'sum_total': return records.reduce((s, r) =>
-      s + (r.capex || 0) + (r.opex_monthly || 0) * (r.contract_term_months || 12), 0);
+    case 'count': return records.length;
+    case 'sum_capex': return records.reduce((s, r) => s + (Number(r.capex) || 0), 0);
+    case 'sum_opex': return records.reduce((s, r) => s + (Number(r.opex_monthly) || 0), 0);
+    case 'sum_total': return records.reduce((s, r) => s + (Number(r.capex) || 0) + (Number(r.opex_monthly) || 0) * (Number(r.contract_term_months) || 12), 0);
     case 'avg_capex': {
-      if (records.length === 0) return 0;
-      return records.reduce((s, r) => s + (r.capex || 0), 0) / records.length;
+      const sum = records.reduce((s, r) => s + (Number(r.capex) || 0), 0);
+      return records.length > 0 ? sum / records.length : 0;
     }
     default: return records.length;
   }
 }
 
-// ==========================================================================
-// Grouping
-// ==========================================================================
+// ─── Grouping ──────────────────────────────────────────────────
+
 function groupRecords(records, groupBy) {
   const groups = {};
   for (const r of records) {
@@ -130,29 +97,29 @@ function groupRecords(records, groupBy) {
         key = r.status || 'Unknown';
         break;
       case 'customer':
-        key = r.expand?.customer?.name || 'Unknown';
+        key = r.expand?.customer?.name || r.customer || 'Unknown';
         break;
       case 'month': {
-        const d = new Date(r.created);
+        const d = new Date(r.created || r.installed_on || 0);
         key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         break;
       }
       case 'quarter': {
-        const d = new Date(r.created);
-        key = `${d.getFullYear()} Q${Math.ceil((d.getMonth() + 1) / 3)}`;
+        const d = new Date(r.created || r.installed_on || 0);
+        key = `${d.getFullYear()} Q${Math.floor(d.getMonth() / 3) + 1}`;
         break;
       }
-      case 'year':
-        key = new Date(r.created).getFullYear().toString();
+      case 'year': {
+        const d = new Date(r.created || r.installed_on || 0);
+        key = `${d.getFullYear()}`;
         break;
+      }
       case 'expiry_month': {
-        if (!r.support_start || !r.contract_term) continue;
-        const expiry = new Date(r.support_start);
-        expiry.setMonth(expiry.getMonth() + r.contract_term);
-        const now = new Date();
-        const limit = new Date(now);
-        limit.setMonth(limit.getMonth() + 12);
-        if (expiry < now || expiry > limit) continue;
+        const start = r.support_start || r.installed_on;
+        const term = Number(r.contract_term) || 12;
+        if (!start) { key = 'Unknown'; break; }
+        const expiry = new Date(start);
+        expiry.setMonth(expiry.getMonth() + term);
         key = `${expiry.getFullYear()}-${String(expiry.getMonth() + 1).padStart(2, '0')}`;
         break;
       }
@@ -165,188 +132,116 @@ function groupRecords(records, groupBy) {
   return groups;
 }
 
-// ==========================================================================
-// Formatting
-// ==========================================================================
-function formatMetricValue(value, metric) {
-  if (metric === 'count') return value.toLocaleString('de-DE');
-  return currency(value);
+// ─── Helpers ───────────────────────────────────────────────────
+
+function formatLabel(key, groupBy) {
+  if (['month', 'expiry_month'].includes(groupBy) && /^\d{4}-\d{2}$/.test(key)) {
+    const [y, m] = key.split('-');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[parseInt(m) - 1]} ${y}`;
+  }
+  return key;
 }
 
-function shortCurrency(value) {
-  if (Math.abs(value) >= 1_000_000) return `€${(value / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(value) >= 1_000) return `€${(value / 1_000).toFixed(0)}k`;
-  return currency(value);
-}
-
-function monthLabel(key) {
-  if (!key.includes('-')) return key;
-  const [y, m] = key.split('-');
-  return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString('de-DE', {
-    month: 'short', year: '2-digit',
-  });
-}
-
-// ==========================================================================
-// Theme-aware chart colors
-// ==========================================================================
-function chartTheme() {
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  return {
-    text:      isDark ? '#94a3b8' : '#6b7280',
-    grid:      isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-    tooltipBg: isDark ? 'rgba(30,41,59,0.95)' : 'rgba(0,0,0,0.85)',
-  };
-}
-
-// ==========================================================================
-// Chart Instance Tracking
-// ==========================================================================
-const chartInstances = new Map();
-
-export function destroyAllCharts() {
-  chartInstances.forEach(chart => { try { chart.destroy(); } catch (_) {} });
-  chartInstances.clear();
+function formatValue(val, metric) {
+  if (metric === 'count') return val.toLocaleString('de-DE');
+  return val.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
 }
 
 function destroyChart(widgetId) {
-  if (chartInstances.has(widgetId)) {
-    try { chartInstances.get(widgetId).destroy(); } catch (_) {}
+  const existing = chartInstances.get(widgetId);
+  if (existing) {
+    existing.destroy();
     chartInstances.delete(widgetId);
   }
 }
 
-// ==========================================================================
-// Widget Container (shell with header + body)
-// ==========================================================================
-function createWidgetShell(widget, { onConfigure }) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'dash-widget';
-  wrapper.dataset.widgetId = widget.id;
-  wrapper.style.gridColumn = `span ${widget.position?.colSpan || 6}`;
-
-  // Header
-  const header = document.createElement('div');
-  header.className = 'dash-widget-header';
-
-  const title = document.createElement('h3');
-  title.className = 'dash-widget-title';
-  title.textContent = widget.title;
-
-  const actions = document.createElement('div');
-  actions.className = 'dash-widget-actions';
-
-  const gearBtn = document.createElement('button');
-  gearBtn.className = 'dash-widget-action-btn';
-  gearBtn.title = 'Configure';
-  gearBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
-  gearBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    onConfigure?.(widget);
-  });
-  actions.appendChild(gearBtn);
-
-  header.appendChild(title);
-  header.appendChild(actions);
-
-  // Body
-  const body = document.createElement('div');
-  body.className = 'dash-widget-body';
-
-  // Set appropriate height based on widget type
-  const heightMap = { card: 'auto', funnel: 'auto', geo: '350px' };
-  body.style.height = heightMap[widget.widget_type] || '260px';
-  if (widget.widget_type === 'card') body.style.minHeight = '60px';
-
-  wrapper.appendChild(header);
-  wrapper.appendChild(body);
-
-  return { wrapper, body };
+function getColors(widget, count) {
+  const scheme = COLOR_SCHEMES[widget.config?.colorScheme] || COLOR_SCHEMES.default;
+  // For status-based grouping, use status colors
+  return scheme;
 }
 
-// ==========================================================================
-// Loading & Empty States
-// ==========================================================================
+function getStatusColors(labels) {
+  return labels.map(l => STATUS_COLORS[l] || '#9ca3af');
+}
+
 function showLoading(el) {
-  el.innerHTML = `
-    <div class="dash-skeleton">
-      <div class="dash-skeleton-bar"></div>
-      <div class="dash-skeleton-bar short"></div>
-      <div class="dash-skeleton-bar"></div>
-    </div>`;
+  el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.3;"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 4-6"/></svg></div>';
 }
 
-function showEmpty(el, message = 'No data available') {
-  el.innerHTML = `
-    <div class="dash-widget-empty">
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
-      </svg>
-      <p>${message}</p>
-    </div>`;
+function showError(el, msg) {
+  el.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary);font-size:0.8rem;opacity:0.6;">${msg}</div>`;
 }
 
-// ==========================================================================
-// Prepare data: fetch → filter → group
-// ==========================================================================
+function showEmpty(el) {
+  showError(el, 'No data available');
+}
+
+function makeCanvas(body) {
+  body.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  body.appendChild(canvas);
+  return canvas;
+}
+
+// ─── Prepare Data (fetch + filter) ─────────────────────────────
+
 async function prepareData(widget, globalTimeRange) {
-  const fetcher = getDataFetcher(widget.data_source);
-  let records = await fetcher();
-  const effectiveRange = widget.config.timeRange || globalTimeRange;
-  records = filterByTimeRange(records, effectiveRange);
-  records = applyStatusFilters(records, widget.config.filters);
-  return records;
+  const records = await getRecords(widget.data_source);
+  const timeRange = widget.config?.timeRange === 'all' ? globalTimeRange : (widget.config?.timeRange || globalTimeRange);
+  let filtered = filterByTime(records, timeRange);
+  filtered = filterByStatus(filtered, widget.config?.filters);
+  return filtered;
 }
 
-// ==========================================================================
-// WIDGET RENDERERS
-// ==========================================================================
+// ─── Renderers ─────────────────────────────────────────────────
 
-// --- Card ---
-async function renderCard(widget, body, globalTimeRange) {
+// KPI Card
+async function renderCard(widget, body) {
   showLoading(body);
   try {
-    const records = await prepareData(widget, globalTimeRange);
-    const value = calculateMetric(records, widget.config.metric);
+    const records = await prepareData(widget, 'all');
+    const value = calcMetric(records, widget.config?.metric || 'count');
 
     body.innerHTML = '';
-    body.classList.add('dash-widget-body-card');
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:4px;';
 
-    const el = document.createElement('div');
-    el.className = 'dash-card-value';
-    el.textContent = widget.config.metric === 'count'
-      ? value.toLocaleString('de-DE')
-      : shortCurrency(value);
-    body.appendChild(el);
+    const num = document.createElement('div');
+    num.style.cssText = 'font-size:1.75rem;font-weight:700;color:var(--text-primary);';
+    num.textContent = formatValue(value, widget.config?.metric || 'count');
+
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:0.75rem;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.05em;';
+    label.textContent = widget.config?.metric === 'count' ? 'Total' : '';
+
+    wrapper.appendChild(num);
+    wrapper.appendChild(label);
+    body.appendChild(wrapper);
   } catch (e) {
-    console.error('Card widget error:', e);
-    showEmpty(body, 'Failed to load data');
+    console.error('[dashboard] card error:', e);
+    showError(body, 'Failed to load');
   }
 }
 
-// --- Line Chart ---
-async function renderLineChart(widget, body, globalTimeRange) {
+// Line Chart
+async function renderLine(widget, body, globalTimeRange) {
   showLoading(body);
   try {
     destroyChart(widget.id);
     const records = await prepareData(widget, globalTimeRange);
-    const groupBy = widget.config.groupBy && widget.config.groupBy !== 'none' ? widget.config.groupBy : 'month';
+    const groupBy = widget.config?.groupBy || 'month';
     const groups = groupRecords(records, groupBy);
-    const sortedKeys = Object.keys(groups).sort();
-    const values = sortedKeys.map(k => calculateMetric(groups[k], widget.config.metric));
+    const keys = Object.keys(groups).sort();
 
-    const isTimeGrouped = ['month', 'quarter', 'year'].includes(groupBy);
-    const labels = sortedKeys.map(k => isTimeGrouped ? monthLabel(k) : k);
+    if (keys.length === 0) { showEmpty(body); return; }
 
-    if (labels.length === 0) { showEmpty(body, 'No data for this time range'); return; }
+    const values = keys.map(k => calcMetric(groups[k], widget.config?.metric || 'count'));
+    const labels = keys.map(k => formatLabel(k, groupBy));
+    const colors = getColors(widget, keys.length);
 
-    body.innerHTML = '';
-    const canvas = document.createElement('canvas');
-    body.appendChild(canvas);
-
-    const colors = COLOR_SCHEMES[widget.config.colorScheme] || COLOR_SCHEMES.default;
-    const theme = chartTheme();
-
+    const canvas = makeCanvas(body);
     const chart = new Chart(canvas, {
       type: 'line',
       data: {
@@ -357,360 +252,240 @@ async function renderLineChart(widget, body, globalTimeRange) {
           borderColor: colors[0],
           backgroundColor: colors[0] + '20',
           fill: true,
-          tension: 0.4,
+          tension: 0.3,
           pointRadius: 3,
-          pointHoverRadius: 6,
-          borderWidth: 2,
+          pointHoverRadius: 5,
         }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: theme.tooltipBg,
-            titleFont: { size: 12 },
-            bodyFont: { size: 12 },
-            padding: 10,
-            cornerRadius: 8,
-            callbacks: {
-              label: ctx => formatMetricValue(ctx.parsed.y, widget.config.metric),
-            },
-          },
-        },
+        plugins: { legend: { display: false } },
         scales: {
-          x: {
-            grid: { display: false },
-            ticks: { font: { size: 11 }, color: theme.text },
-          },
-          y: {
-            grid: { color: theme.grid },
-            ticks: {
-              font: { size: 11 },
-              color: theme.text,
-              callback: v => widget.config.metric === 'count' ? v : shortCurrency(v),
-            },
-            beginAtZero: true,
-          },
+          y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+          x: { grid: { display: false } },
         },
       },
     });
     chartInstances.set(widget.id, chart);
   } catch (e) {
-    console.error('Line chart error:', e);
-    showEmpty(body, 'Failed to load chart');
+    console.error('[dashboard] line error:', e);
+    showError(body, 'Failed to load chart');
   }
 }
 
-// --- Bar Chart ---
-async function renderBarChart(widget, body, globalTimeRange) {
+// Bar Chart
+async function renderBar(widget, body, globalTimeRange) {
   showLoading(body);
   try {
     destroyChart(widget.id);
     const records = await prepareData(widget, globalTimeRange);
-    const groupBy = widget.config.groupBy && widget.config.groupBy !== 'none' ? widget.config.groupBy : 'status';
+    const groupBy = widget.config?.groupBy || 'status';
     const groups = groupRecords(records, groupBy);
+    let keys = Object.keys(groups).sort();
 
-    let entries = Object.entries(groups).map(([key, recs]) => ({
-      label: key,
-      value: calculateMetric(recs, widget.config.metric),
-    }));
-
-    const timeGroups = ['month', 'quarter', 'year', 'expiry_month'];
-    if (timeGroups.includes(widget.config.groupBy)) {
-      entries.sort((a, b) => a.label.localeCompare(b.label));
-    } else {
-      entries.sort((a, b) => b.value - a.value);
+    // For customer groupBy, sort by value descending and limit
+    const metric = widget.config?.metric || 'count';
+    if (groupBy === 'customer') {
+      keys.sort((a, b) => calcMetric(groups[b], metric) - calcMetric(groups[a], metric));
+      const limit = widget.config?.limit || 20;
+      keys = keys.slice(0, limit);
     }
 
-    if (widget.config.limit) entries = entries.slice(0, widget.config.limit);
-    if (entries.length === 0) { showEmpty(body, 'No data available'); return; }
+    if (keys.length === 0) { showEmpty(body); return; }
 
-    const isTimeLabel = ['month', 'expiry_month'].includes(widget.config.groupBy);
-    const labels = entries.map(e => isTimeLabel ? monthLabel(e.label) : e.label);
-    const values = entries.map(e => e.value);
+    const values = keys.map(k => calcMetric(groups[k], metric));
+    const labels = keys.map(k => formatLabel(k, groupBy));
+    const isStatus = groupBy === 'status';
+    const colors = isStatus ? getStatusColors(keys) : getColors(widget, keys.length);
+    const bgColors = isStatus ? colors : colors.slice(0, keys.length).concat(colors).slice(0, keys.length);
 
-    body.innerHTML = '';
-    const canvas = document.createElement('canvas');
-    body.appendChild(canvas);
-
-    const colors = COLOR_SCHEMES[widget.config.colorScheme] || COLOR_SCHEMES.default;
-    const isHorizontal = !!widget.config.horizontal;
-    const theme = chartTheme();
-
-    // Use status colors when grouping by status
-    let bgColors, borderColors;
-    if (widget.config.groupBy === 'status') {
-      bgColors = entries.map(e => (STATUS_COLORS[e.label] || colors[0]) + 'cc');
-      borderColors = entries.map(e => STATUS_COLORS[e.label] || colors[0]);
-    } else {
-      bgColors = entries.map((_, i) => colors[i % colors.length] + 'cc');
-      borderColors = entries.map((_, i) => colors[i % colors.length]);
-    }
-
-    destroyChart(widget.id);
+    const canvas = makeCanvas(body);
     const chart = new Chart(canvas, {
       type: 'bar',
       data: {
         labels,
         datasets: [{
+          label: widget.title,
           data: values,
           backgroundColor: bgColors,
-          borderColor: borderColors,
-          borderWidth: 1,
-          borderRadius: 6,
-          barPercentage: 0.7,
+          borderRadius: 4,
+          maxBarThickness: 40,
         }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        indexAxis: isHorizontal ? 'y' : 'x',
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: theme.tooltipBg,
-            padding: 10,
-            cornerRadius: 8,
-            callbacks: {
-              label: ctx => formatMetricValue(ctx.parsed[isHorizontal ? 'x' : 'y'], widget.config.metric),
-            },
-          },
-        },
+        indexAxis: widget.config?.horizontal ? 'y' : 'x',
+        plugins: { legend: { display: false } },
         scales: {
-          x: {
-            grid: { display: isHorizontal, color: theme.grid },
-            ticks: {
-              font: { size: 11 },
-              color: theme.text,
-              callback: isHorizontal
-                ? (v => widget.config.metric === 'count' ? v : shortCurrency(v))
-                : undefined,
-            },
-            beginAtZero: true,
-          },
-          y: {
-            grid: { display: !isHorizontal, color: theme.grid },
-            ticks: {
-              font: { size: 11 },
-              color: theme.text,
-              callback: !isHorizontal
-                ? (v => widget.config.metric === 'count' ? v : shortCurrency(v))
-                : undefined,
-            },
-            beginAtZero: true,
-          },
+          y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+          x: { grid: { display: false } },
         },
       },
     });
     chartInstances.set(widget.id, chart);
   } catch (e) {
-    console.error('Bar chart error:', e);
-    showEmpty(body, 'Failed to load chart');
+    console.error('[dashboard] bar error:', e);
+    showError(body, 'Failed to load chart');
   }
 }
 
-// --- Pie / Donut ---
+// Pie / Donut
 async function renderPieDonut(widget, body, globalTimeRange) {
   showLoading(body);
   try {
     destroyChart(widget.id);
     const records = await prepareData(widget, globalTimeRange);
-    const groupBy = widget.config.groupBy && widget.config.groupBy !== 'none' ? widget.config.groupBy : 'status';
+    const groupBy = widget.config?.groupBy || 'status';
     const groups = groupRecords(records, groupBy);
+    const keys = Object.keys(groups).sort();
 
-    const entries = Object.entries(groups)
-      .map(([key, recs]) => ({ label: key, value: calculateMetric(recs, widget.config.metric) }))
-      .sort((a, b) => b.value - a.value);
+    if (keys.length === 0) { showEmpty(body); return; }
 
-    if (entries.length === 0) { showEmpty(body, 'No data available'); return; }
+    const metric = widget.config?.metric || 'count';
+    const values = keys.map(k => calcMetric(groups[k], metric));
+    const isStatus = groupBy === 'status';
+    const colors = isStatus ? getStatusColors(keys) : getColors(widget, keys.length);
+    const bgColors = isStatus ? colors : colors.slice(0, keys.length).concat(colors).slice(0, keys.length);
 
-    body.innerHTML = '';
-    const canvas = document.createElement('canvas');
-    body.appendChild(canvas);
-
-    const colors = COLOR_SCHEMES[widget.config.colorScheme] || COLOR_SCHEMES.default;
-    const theme = chartTheme();
-
-    // Use status colors when grouping by status
-    let bgColors, borderColors;
-    if (widget.config.groupBy === 'status') {
-      bgColors = entries.map(e => (STATUS_COLORS[e.label] || colors[0]) + 'cc');
-      borderColors = entries.map(e => STATUS_COLORS[e.label] || colors[0]);
-    } else {
-      bgColors = entries.map((_, i) => colors[i % colors.length] + 'cc');
-      borderColors = entries.map((_, i) => colors[i % colors.length]);
-    }
-
-    destroyChart(widget.id);
+    const canvas = makeCanvas(body);
     const chart = new Chart(canvas, {
-      type: 'doughnut',
+      type: widget.widget_type === 'donut' ? 'doughnut' : 'pie',
       data: {
-        labels: entries.map(e => e.label),
+        labels: keys,
         datasets: [{
-          data: entries.map(e => e.value),
+          data: values,
           backgroundColor: bgColors,
-          borderColor: borderColors,
           borderWidth: 2,
-          hoverOffset: 6,
+          borderColor: '#fff',
         }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: widget.widget_type === 'donut' ? '60%' : '0%',
+        cutout: widget.widget_type === 'donut' ? '55%' : 0,
         plugins: {
           legend: {
             position: 'right',
-            labels: {
-              font: { size: 11 },
-              color: theme.text,
-              padding: 12,
-              usePointStyle: true,
-              pointStyleWidth: 8,
-            },
-          },
-          tooltip: {
-            backgroundColor: theme.tooltipBg,
-            padding: 10,
-            cornerRadius: 8,
-            callbacks: {
-              label: ctx => {
-                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                const pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
-                return ` ${ctx.label}: ${formatMetricValue(ctx.parsed, widget.config.metric)} (${pct}%)`;
-              },
-            },
+            labels: { boxWidth: 12, padding: 10, font: { size: 11 } },
           },
         },
       },
     });
     chartInstances.set(widget.id, chart);
   } catch (e) {
-    console.error('Pie/Donut error:', e);
-    showEmpty(body, 'Failed to load chart');
+    console.error('[dashboard] pie error:', e);
+    showError(body, 'Failed to load chart');
   }
 }
 
-// --- Funnel (custom HTML — not a native Chart.js type) ---
+// Funnel (custom SVG, not Chart.js)
 async function renderFunnel(widget, body, globalTimeRange) {
   showLoading(body);
   try {
-    let records = await fetchOpportunities();
-    const effectiveRange = widget.config.timeRange || globalTimeRange;
-    records = filterByTimeRange(records, effectiveRange);
+    const records = await prepareData(widget, globalTimeRange);
+    const groups = groupRecords(records, 'status');
 
-    // Pipeline stage order (logical sales flow)
-    const stageOrder = [
-      'NEW', 'CALCULATED', 'QUOTE SEND', 'ORDERED', 'IN PROGRESS', 'WON',
-    ];
-    const stageColors = [
-      '#4f46e5', '#3b82f6', '#06b6d4', '#8b5cf6', '#f59e0b', '#10b981',
-    ];
+    // Ordered stages
+    const stages = ['NEW', 'CALCULATED', 'QUOTE SEND', 'IN PROGRESS', 'ORDERED', 'WON'];
+    const stageData = stages
+      .filter(s => groups[s] && groups[s].length > 0)
+      .map(s => ({
+        label: s,
+        count: groups[s].length,
+        value: groups[s].reduce((sum, r) => sum + (Number(r.capex) || 0), 0),
+        color: STATUS_COLORS[s] || '#9ca3af',
+      }));
 
-    const stages = [];
-    for (let i = 0; i < stageOrder.length; i++) {
-      const stageRecords = records.filter(r => r.status === stageOrder[i]);
-      if (stageRecords.length === 0) continue;
-      const value = stageRecords.reduce((s, r) => s + (r.capex || 0), 0);
-      stages.push({
-        label: stageOrder[i],
-        count: stageRecords.length,
-        value,
-        color: stageColors[i],
-      });
-    }
+    if (stageData.length === 0) { showEmpty(body); return; }
 
-    if (stages.length === 0) { showEmpty(body, 'No pipeline data'); return; }
+    const maxCount = Math.max(...stageData.map(s => s.count));
 
     body.innerHTML = '';
-    const funnel = document.createElement('div');
-    funnel.className = 'dash-funnel';
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'display:flex;flex-direction:column;gap:6px;padding:8px 0;height:100%;justify-content:center;';
 
-    const maxCount = Math.max(...stages.map(s => s.count));
-
-    stages.forEach(stage => {
+    stageData.forEach(stage => {
       const row = document.createElement('div');
-      row.className = 'dash-funnel-stage';
+      row.style.cssText = 'display:flex;align-items:center;gap:12px;';
 
       const label = document.createElement('div');
-      label.className = 'dash-funnel-label';
-      label.innerHTML = `
-        <span class="dash-funnel-name">${stage.label}</span>
-        <span class="dash-funnel-stats">${stage.count} opps &middot; ${shortCurrency(stage.value)}</span>`;
+      label.style.cssText = 'width:100px;text-align:right;font-size:0.75rem;color:var(--text-secondary);white-space:nowrap;';
+      label.textContent = stage.label;
 
-      const barWrap = document.createElement('div');
-      barWrap.className = 'dash-funnel-bar-wrap';
+      const barOuter = document.createElement('div');
+      barOuter.style.cssText = 'flex:1;height:28px;background:#f3f4f6;border-radius:4px;overflow:hidden;position:relative;';
 
-      const bar = document.createElement('div');
-      bar.className = 'dash-funnel-bar';
-      const widthPct = maxCount > 0 ? (stage.count / maxCount) * 100 : 0;
-      bar.style.width = `${Math.max(widthPct, 5)}%`;
-      bar.style.backgroundColor = stage.color;
+      const barInner = document.createElement('div');
+      const pct = maxCount > 0 ? (stage.count / maxCount) * 100 : 0;
+      barInner.style.cssText = `width:${pct}%;height:100%;background:${stage.color};border-radius:4px;transition:width 0.5s ease;`;
 
-      barWrap.appendChild(bar);
+      const info = document.createElement('div');
+      info.style.cssText = 'position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:0.7rem;color:var(--text-secondary);';
+      info.textContent = `${stage.count} · ${stage.value.toLocaleString('de-DE')} €`;
+
+      barOuter.appendChild(barInner);
+      barOuter.appendChild(info);
       row.appendChild(label);
-      row.appendChild(barWrap);
-      funnel.appendChild(row);
+      row.appendChild(barOuter);
+      wrapper.appendChild(row);
     });
 
-    body.appendChild(funnel);
+    body.appendChild(wrapper);
   } catch (e) {
-    console.error('Funnel error:', e);
-    showEmpty(body, 'Failed to load funnel');
+    console.error('[dashboard] funnel error:', e);
+    showError(body, 'Failed to load');
   }
 }
 
-// --- Geo Map (placeholder — customers lack a country field) ---
-function renderGeo(widget, body) {
-  body.innerHTML = `
-    <div class="dash-widget-empty">
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M2 12h20"/>
-        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-      </svg>
-      <p>Add country codes to customers to enable geo view</p>
-    </div>`;
+// ─── Public API ────────────────────────────────────────────────
+
+export function renderWidget(widget, container, globalTimeRange) {
+  // Widget card structure
+  const card = document.createElement('div');
+  card.className = 'dash-widget';
+  card.style.gridColumn = `span ${widget.position?.colSpan || 6}`;
+
+  const header = document.createElement('div');
+  header.className = 'dash-widget-header';
+
+  const title = document.createElement('h4');
+  title.textContent = widget.title || 'Widget';
+  header.appendChild(title);
+
+  const gearBtn = document.createElement('button');
+  gearBtn.className = 'dash-widget-gear';
+  gearBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>';
+  header.appendChild(gearBtn);
+
+  card.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'dash-widget-body';
+  card.appendChild(body);
+
+  container.appendChild(card);
+
+  // Render content
+  const type = widget.widget_type;
+  if (type === 'card') renderCard(widget, body);
+  else if (type === 'line') renderLine(widget, body, globalTimeRange);
+  else if (type === 'bar') renderBar(widget, body, globalTimeRange);
+  else if (type === 'pie' || type === 'donut') renderPieDonut(widget, body, globalTimeRange);
+  else if (type === 'funnel') renderFunnel(widget, body, globalTimeRange);
+  else showError(body, `Unknown type: ${type}`);
+
+  return { card, gearBtn };
 }
 
-// ==========================================================================
-// Main renderWidget — dispatches to the correct renderer
-// ==========================================================================
-
-/**
- * Render a single widget into the grid container.
- * @param {Object} widget - Widget configuration
- * @param {HTMLElement} gridContainer - The 12-column grid element
- * @param {{ onConfigure: Function, globalTimeRange: string }} opts
- * @returns {HTMLElement} The widget wrapper element
- */
-export function renderWidget(widget, gridContainer, { onConfigure, globalTimeRange }) {
-  const { wrapper, body } = createWidgetShell(widget, { onConfigure });
-  gridContainer.appendChild(wrapper);
-
-  // Dispatch — each renderer is async but we fire-and-forget
-  const renderers = {
-    card:   renderCard,
-    line:   renderLineChart,
-    bar:    renderBarChart,
-    pie:    renderPieDonut,
-    donut:  renderPieDonut,
-    funnel: renderFunnel,
-    geo:    renderGeo,
-  };
-
-  const render = renderers[widget.widget_type];
-  if (render) {
-    if (widget.widget_type === 'geo') {
-      render(widget, body);
-    } else {
-      render(widget, body, globalTimeRange);
-    }
-  } else {
-    showEmpty(body, `Unknown widget type: ${widget.widget_type}`);
+export function destroyAllCharts() {
+  for (const [id, chart] of chartInstances) {
+    chart.destroy();
   }
+  chartInstances.clear();
+}
 
-  return wrapper;
+export function clearCache() {
+  dataCache.clear();
 }
