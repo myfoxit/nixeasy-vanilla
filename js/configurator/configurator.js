@@ -859,6 +859,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     if (exportPopoverInstance) exportPopoverInstance.destroy();
     if (loadPopoverInstance) loadPopoverInstance.destroy();
     if (savePopoverInstance) savePopoverInstance.destroy();
+    if (unifiedGridInstance?.destroy) unifiedGridInstance.destroy();
     container.innerHTML = '';
   }
 

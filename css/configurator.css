@@ -1268,7 +1268,7 @@
 
 .presentation-grid td {
   padding: 0 12px;
-  height: 38px;
+  height: 46px;
   border-bottom: 1px solid rgba(0,0,0,0.04);
   vertical-align: middle;
   white-space: nowrap;
@@ -1384,7 +1384,7 @@
   background: #eef2ff;
   border-top: 2px solid var(--primary);
   border-bottom: 1px solid #d4d9e8;
-  height: 44px;
+  height: 50px;
 }
 
 .presentation-grid .header-row td:first-child {
