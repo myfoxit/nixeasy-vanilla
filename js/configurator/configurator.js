@@ -115,12 +115,6 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       if (Math.abs((al.price || 0) - (bl.price || 0)) > 0.001)
         changes.push({ action: 'price_changed', sku: al.sku || '', name: al.name, old: bl.price, new: al.price });
 
-      if ((al.amount || 1) !== (bl.amount || 1))
-        changes.push({ action: 'qty_changed', sku: al.sku || '', name: al.name, old: bl.amount, new: al.amount });
-
-      if (Math.abs((al.margin || 0) - (bl.margin || 0)) > 0.001)
-        changes.push({ action: 'margin_changed', sku: al.sku || '', name: al.name, old: bl.margin, new: al.margin });
-
       if (al.sla !== bl.sla) {
         const oldName = _slas.find(s => s.id === bl.sla)?.name || bl.sla || 'None';
         const newName = _slas.find(s => s.id === al.sla)?.name || al.sla || 'None';
@@ -183,7 +177,9 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       const changes = diffLineItems(_savedSnapshot, lineItems);
       if (changes.length > 0) {
         try {
-          const clBody = { quote: qId, changes };
+          // Send as both 'changes' and 'objects' to handle either field name
+          // until the PocketBase collection field name is confirmed as 'changes'
+          const clBody = { quote: qId, changes, objects: changes };
           if (!isSuperUser() && currentUser?.id) clBody.changed_by = currentUser.id;
           await pb.collection('quote_changelog').create(clBody);
         } catch (err) {

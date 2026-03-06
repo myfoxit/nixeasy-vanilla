@@ -122,10 +122,9 @@ export function createUnifiedGrid({
     if (!line || !orig) return {};
     const changes = {};
     // Compare line.name (persisted) not item.displayName (session-only)
+    // qty and margin are intentional user edits — no indicator/reset for those
     if (line.name !== orig.name) changes.name = orig.name;
-    if (line.amount !== orig.amount) changes.qty = orig.amount;
     if (Math.abs(line.price - orig.price) > 0.001) changes.price = orig.price;
-    if (Math.abs(line.margin - orig.margin) > 0.001) changes.margin = orig.margin;
     if (line.sla !== orig.sla) changes.sla = orig.sla;
     return changes;
   }
@@ -134,15 +133,11 @@ export function createUnifiedGrid({
   function resetItem(item) {
     const line = getLine(item), orig = getOrig(item);
     if (!line || !orig) return;
-    line.name    = orig.name;
-    line.amount  = orig.amount;
-    line.price   = orig.price;
-    line.margin  = orig.margin;
-    line.sla     = orig.sla;
-    item.displayName   = null;
-    item.displayQty    = null;
-    item.displayPrice  = null;
-    item.displayMargin = null;
+    line.name   = orig.name;
+    line.price  = orig.price;
+    line.sla    = orig.sla;
+    item.displayName  = null;
+    item.displayPrice = null;
     emitSummary(); render();
     showToast('Reset to original', 'success');
   }
