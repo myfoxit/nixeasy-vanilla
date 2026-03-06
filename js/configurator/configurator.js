@@ -17,6 +17,7 @@ import { createUnifiedGrid } from './unified-grid.js';
 import { createSummaryCard } from './summary-card.js';
 import { createContextBanner } from './context-banner.js';
 import { createInstalledBasePanel } from './installed-base-panel.js';
+import { createChangelogPanel } from './changelog-panel.js';
 import {
   MEASURE_POINT_LICENSE_CONFIGS,
   calculateLicenseDistribution
@@ -70,6 +71,65 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   let loadPopoverInstance = null;
   let savePopoverInstance = null;
 
+  // Changelog
+  let _savedSnapshot = [];   // lineItems as of last load or save
+  let _slas = [];            // for SLA name resolution in diffs
+  let changelogPanelInstance = null;
+
+  /** Deep-clone a lineItems array for snapshot storage */
+  function cloneSnapshot(items) { return items.map(l => ({ ...l })); }
+
+  /** Unique key for a line item */
+  function lineKey(l) {
+    return l.licenseId
+      ? 'lic:' + l.licenseId
+      : l.servicePackId
+        ? 'sp:' + l.servicePackId
+        : 'n:' + (l.name || '');
+  }
+
+  /** Compute what changed between two lineItem arrays */
+  function diffLineItems(before, after) {
+    const changes = [];
+    const bMap = new Map(before.map(l => [lineKey(l), l]));
+    const aMap = new Map(after.map(l  => [lineKey(l), l]));
+
+    // Removed
+    for (const [k, l] of bMap) {
+      if (!aMap.has(k))
+        changes.push({ action: 'item_removed', sku: l.sku || '', name: l.name || '' });
+    }
+    // Added
+    for (const [k, l] of aMap) {
+      if (!bMap.has(k))
+        changes.push({ action: 'item_added', sku: l.sku || '', name: l.name || '' });
+    }
+    // Field-level changes on existing items
+    for (const [k, al] of aMap) {
+      const bl = bMap.get(k);
+      if (!bl) continue;
+
+      if (al.name !== bl.name)
+        changes.push({ action: 'name_changed', sku: al.sku || '', name: bl.name, old: bl.name, new: al.name });
+
+      if (Math.abs((al.price || 0) - (bl.price || 0)) > 0.001)
+        changes.push({ action: 'price_changed', sku: al.sku || '', name: al.name, old: bl.price, new: al.price });
+
+      if ((al.amount || 1) !== (bl.amount || 1))
+        changes.push({ action: 'qty_changed', sku: al.sku || '', name: al.name, old: bl.amount, new: al.amount });
+
+      if (Math.abs((al.margin || 0) - (bl.margin || 0)) > 0.001)
+        changes.push({ action: 'margin_changed', sku: al.sku || '', name: al.name, old: bl.margin, new: al.margin });
+
+      if (al.sla !== bl.sla) {
+        const oldName = _slas.find(s => s.id === bl.sla)?.name || bl.sla || 'None';
+        const newName = _slas.find(s => s.id === al.sla)?.name || al.sla || 'None';
+        changes.push({ action: 'sla_changed', sku: al.sku || '', name: al.name, old: oldName, new: newName });
+      }
+    }
+    return changes;
+  }
+
   // ======================================================
   // HELPERS — delegate to unifiedGridInstance
   // ======================================================
@@ -109,12 +169,31 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     const body = { opportunity: oppId, quote_data: configToSave };
     if (!isSuperUser() && currentUser?.id) body.created_by = currentUser.id;
 
+    const isUpdate = !!qId;   // true = update, false = first create
+
     if (qId) {
       await pb.collection('quotes').update(qId, body);
     } else {
       const res = await pb.collection('quotes').create(body);
       qId = res.id;
     }
+
+    // Write changelog (only for updates, not initial creation)
+    if (isUpdate) {
+      const changes = diffLineItems(_savedSnapshot, lineItems);
+      if (changes.length > 0) {
+        try {
+          const clBody = { quote: qId, changes };
+          if (!isSuperUser() && currentUser?.id) clBody.changed_by = currentUser.id;
+          await pb.collection('quote_changelog').create(clBody);
+        } catch (err) {
+          console.warn('Changelog write failed:', err.message);
+        }
+      }
+    }
+
+    // Update snapshot to current state so next save diffs against this
+    _savedSnapshot = cloneSnapshot(lineItems);
   }
 
   async function saveQuoteName() {
@@ -356,6 +435,27 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       exportTrigger.textContent = 'Export';
       exportPopoverInstance = createPopover({ trigger: exportTrigger, content: () => buildExportContent(), align: 'right', width: 280 });
       headerRight.appendChild(exportPopoverInstance.element);
+
+      // History
+      const historyBtn = document.createElement('button');
+      historyBtn.className = 'btn btn-secondary btn-sm';
+      historyBtn.title = 'View change history';
+      historyBtn.innerHTML =
+        '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:15px;height:15px;display:inline-block;vertical-align:middle;margin-right:4px;">' +
+        '<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>History';
+      historyBtn.addEventListener('click', () => {
+        if (!qId) { showToast('Save the quote first to view history', 'info'); return; }
+        if (changelogPanelInstance) {
+          changelogPanelInstance.destroy();
+          changelogPanelInstance = null;
+          return;
+        }
+        changelogPanelInstance = createChangelogPanel({
+          quoteId: qId,
+          onClose: () => { changelogPanelInstance?.destroy(); changelogPanelInstance = null; },
+        });
+      });
+      headerRight.appendChild(historyBtn);
 
       // Save
       const saveBtn = document.createElement('button');
@@ -727,6 +827,13 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   // ======================================================
 
   async function loadInitialData() {
+    // Load SLAs (needed for changelog diff SLA name resolution)
+    try {
+      _slas = await pb.collection('service_level_agreements').getFullList({ sort: 'name' });
+    } catch (err) {
+      console.warn('Failed to load SLAs for changelog:', err.message);
+    }
+
     // Load service packs
     try {
       const spList = await pb.collection('service_packs').getFullList({ sort: 'package_name' });
@@ -770,6 +877,8 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
           const items  = Array.isArray(data.lineItems) ? data.lineItems : [];
           const groups = data.groups || data.containers || [];
           unifiedGridInstance.loadItems(items, groups);
+          // Snapshot what we loaded so the first save diffs against it
+          _savedSnapshot = cloneSnapshot(items);
         }
       } catch (err) {
         console.error('Failed to load quote:', err);
@@ -866,6 +975,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     if (exportPopoverInstance) exportPopoverInstance.destroy();
     if (loadPopoverInstance) loadPopoverInstance.destroy();
     if (savePopoverInstance) savePopoverInstance.destroy();
+    if (changelogPanelInstance) changelogPanelInstance.destroy();
     if (unifiedGridInstance?.destroy) unifiedGridInstance.destroy();
     container.innerHTML = '';
   }
