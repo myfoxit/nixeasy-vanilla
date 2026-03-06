@@ -367,41 +367,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     titleEl.textContent = isTemplateMode ? 'Template Editor' : 'Quote Builder';
     headerLeft.appendChild(titleEl);
 
-    // Editable quote name
-    if (!isTemplateMode) {
-      const nameInput = document.createElement('input');
-      nameInput.type = 'text';
-      nameInput.value = quoteName;
-      nameInput.placeholder = 'Quote name…';
-      nameInput.style.cssText = 'border:none;border-bottom:1px solid transparent;background:transparent;font-size:0.8rem;color:var(--text-secondary);padding:2px 4px;outline:none;width:160px;transition:border-color 0.15s;';
-      nameInput.addEventListener('focus', () => { nameInput.style.borderBottomColor = 'var(--primary)'; });
-      nameInput.addEventListener('blur', () => {
-        nameInput.style.borderBottomColor = 'transparent';
-        const v = nameInput.value.trim();
-        if (v !== quoteName) { quoteName = v; saveQuoteName(); }
-      });
-      nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') nameInput.blur(); });
-      headerLeft.appendChild(nameInput);
-
-      // Sibling quote tabs
-      if (oppId) {
-        const tabsWrap = document.createElement('div');
-        tabsWrap.style.cssText = 'display:flex;gap:4px;margin-left:4px;';
-        headerLeft.appendChild(tabsWrap);
-        pb.collection('quotes').getFullList({ filter: `opportunity = "${oppId}"`, sort: '-created', requestKey: null })
-          .then(siblings => {
-            if (siblings.length <= 1) return;
-            siblings.forEach(sq => {
-              const isCurrent = sq.id === qId;
-              const tab = document.createElement('button');
-              tab.style.cssText = `padding:2px 8px;font-size:0.68rem;border-radius:4px;border:1px solid ${isCurrent ? 'var(--primary)' : 'var(--border)'};background:${isCurrent ? 'var(--primary-light)' : 'transparent'};color:${isCurrent ? 'var(--primary)' : 'var(--text-secondary)'};cursor:pointer;font-weight:${isCurrent ? '600' : '400'};white-space:nowrap;`;
-              tab.textContent = sq.name || `Quote ${sq.id.slice(0, 6)}`;
-              if (!isCurrent) tab.addEventListener('click', () => navigate(`/opportunities/${oppId}/quotes/${sq.id}`));
-              tabsWrap.appendChild(tab);
-            });
-          }).catch(() => {});
-      }
-    }
+    // Quote name input and sibling tabs removed — not needed
 
     headerTop.appendChild(headerLeft);
 
