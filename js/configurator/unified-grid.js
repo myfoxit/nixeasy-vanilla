@@ -31,9 +31,10 @@ const ICONS = {
   reset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>',
 };
 
-// Keyboard-navigable editable columns (td data-col values)
-const EDIT_COLS = [2, 5, 6, 7, 9]; // name, qty, price, margin, notes
-const COL_COUNT = 11;
+// Column layout:
+// 0=drag 1=check 2=type-badge 3=name 4=sku 5=sla  6=qty 7=price 8=margin 9=total 10=monthly 11=notes 12=actions
+const EDIT_COLS = [3, 6, 7, 8, 11]; // name, qty, price, margin, notes
+const COL_COUNT = 13;
 
 export function createUnifiedGrid({
   licenses = [],
@@ -553,31 +554,46 @@ export function createUnifiedGrid({
     const cnt = selectedRows.size; if (!cnt) return;
 
     floatingBar = document.createElement('div');
-    floatingBar.className = 'pe-floating-bar';
+    // Light card style — matches app surface, not dark bar
+    floatingBar.style.cssText = [
+      'position:fixed;bottom:28px;left:50%;transform:translateX(-50%)',
+      'display:flex;align-items:center;gap:8px;padding:8px 16px',
+      'border-radius:999px',
+      'background:var(--surface)',
+      'border:1px solid var(--border)',
+      'box-shadow:0 4px 24px rgba(0,0,0,0.10),0 1px 4px rgba(0,0,0,0.06)',
+      'font-size:0.82rem;font-weight:500;color:var(--text-main)',
+      'z-index:200;white-space:nowrap',
+      'animation:pe-barIn 0.18s ease-out',
+    ].join(';') + ';';
 
     const lbl = document.createElement('span');
-    lbl.className = 'pe-floating-bar-label';
+    lbl.style.cssText = 'color:var(--text-secondary);margin-right:2px;font-size:0.78rem;';
     lbl.textContent = `${cnt} row${cnt>1?'s':''} selected`;
     floatingBar.appendChild(lbl);
 
-    const addBtn = (text, cls, fn) => {
+    const sep = () => { const s=document.createElement('div'); s.style.cssText='width:1px;height:16px;background:var(--border);margin:0 2px;'; floatingBar.appendChild(s); };
+
+    const addBtn = (text, style, fn) => {
       const b = document.createElement('button');
-      b.className = `pe-floating-bar-btn ${cls}`;
+      b.style.cssText = `display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:999px;font-size:0.76rem;font-weight:500;cursor:pointer;transition:all 0.12s;${style}`;
       b.textContent = text;
       b.addEventListener('click', fn);
       floatingBar.appendChild(b);
     };
 
     if (cnt >= 2) {
-      addBtn('Merge', 'pe-fab-primary', mergeSelected);
-      addBtn('Group', '', groupSelected);
+      sep();
+      addBtn('Merge', 'background:var(--primary);color:#fff;border:1px solid var(--primary);', mergeSelected);
+      addBtn('Group', 'background:var(--primary-light);color:var(--primary);border:1px solid var(--primary);', groupSelected);
     }
-    addBtn('Delete', 'pe-fab-danger', deleteSelected);
+    sep();
+    addBtn('Delete', 'background:rgba(239,68,68,0.08);color:#ef4444;border:1px solid rgba(239,68,68,0.25);', deleteSelected);
+    sep();
 
     const close = document.createElement('button');
-    close.className = 'pe-floating-bar-btn';
-    close.style.cssText = 'margin-left:8px;padding:4px 8px;';
-    close.textContent = '✕';
+    close.style.cssText = 'background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:999px;padding:3px 8px;cursor:pointer;font-size:0.8rem;';
+    close.innerHTML = '&times;';
     close.title = 'Deselect all';
     close.addEventListener('click', () => { selectedRows.clear(); emitSel(); render(); });
     floatingBar.appendChild(close);
@@ -740,6 +756,32 @@ export function createUnifiedGrid({
 
   // ── Row builders ─────────────────────────────────────────────────
 
+  // Hover tooltip helper — shows original value on hover over a changed cell
+  function attachChangeTip(td, label, origVal) {
+    td.style.borderBottom = '2px solid #f59e0b';
+    td.style.cursor = 'help';
+    td.addEventListener('mouseenter', e => {
+      document.getElementById('ug-tip')?.remove();
+      const tip = document.createElement('div');
+      tip.id = 'ug-tip';
+      tip.style.cssText = [
+        'position:fixed;z-index:9999',
+        'background:var(--surface);color:var(--text-main)',
+        'font-size:0.72rem;padding:5px 10px;border-radius:6px',
+        'border:1px solid var(--border)',
+        'box-shadow:0 4px 12px rgba(0,0,0,0.12)',
+        'pointer-events:none;white-space:nowrap',
+      ].join(';') + ';';
+      const dot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f59e0b;margin-right:5px;vertical-align:middle;"></span>`;
+      tip.innerHTML = `${dot}Original <b>${label}</b>: <span style="color:#92400e;font-weight:600;">${origVal}</span>`;
+      document.body.appendChild(tip);
+      const rect = td.getBoundingClientRect();
+      tip.style.top  = (rect.bottom + 4) + 'px';
+      tip.style.left = Math.min(rect.left, window.innerWidth - 260) + 'px';
+    });
+    td.addEventListener('mouseleave', () => document.getElementById('ug-tip')?.remove());
+  }
+
   function buildHeaderRow(item, sectionItems, rowIdx) {
     const isCollapsed = collapsedGroups.has(item.id);
     const subtotal  = sectionItems.reduce((s,i) => s+calcTotal(i), 0);
@@ -761,8 +803,8 @@ export function createUnifiedGrid({
     cb.addEventListener('click', e => { e.stopPropagation(); handleCheck(item.id, cb.checked, e.shiftKey); });
     tdCheck.appendChild(cb); tr.appendChild(tdCheck);
 
-    // Name (col 2, spans name+sla+qty+price+margin = 5 cols)
-    const tdName = document.createElement('td'); tdName.colSpan = 5; tdName.className = 'pg-cell-header-name';
+    // Name (spans type + name + sku + sla + qty + price + margin = 7 cols)
+    const tdName = document.createElement('td'); tdName.colSpan = 7; tdName.className = 'pg-cell-header-name';
     const chev = document.createElement('span'); chev.className = 'pg-group-chevron'; chev.style.cursor='pointer';
     chev.innerHTML = isCollapsed
       ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>'
@@ -827,29 +869,42 @@ export function createUnifiedGrid({
     const tdDrag = document.createElement('td'); tdDrag.className = 'pg-col-drag';
     tdDrag.innerHTML = `<span class="pg-drag-handle">${ICONS.grip}</span>`; tr.appendChild(tdDrag);
 
-    // Checkbox + modified indicator
+    // Checkbox + modified dot
     const tdCheck = document.createElement('td'); tdCheck.className = 'pg-cell-check';
+    tdCheck.style.cssText = 'vertical-align:middle;';
     const cb = document.createElement('input'); cb.type='checkbox'; cb.checked=selectedRows.has(item.id);
     cb.addEventListener('click', e => { e.stopPropagation(); handleCheck(item.id, cb.checked, e.shiftKey); });
     tdCheck.appendChild(cb);
     if (modified) {
       const dot = document.createElement('span'); dot.className = 'changed-indicator';
-      dot.title = 'This row has been modified from original'; tdCheck.appendChild(dot);
+      dot.title = 'Row has been modified — hover changed cells to see originals';
+      dot.style.cssText = 'display:block;margin:2px auto 0;';
+      tdCheck.appendChild(dot);
     }
     tr.appendChild(tdCheck);
 
-    // Name column (col 2) — badge + name (editable) + sku (read-only)
-    const tdName = document.createElement('td');
-    tdName.style.cssText = isGrouped ? 'padding-left:28px;' : '';
+    // ── Col 2: Type badge (non-editable, own cell) ───────────────
+    const tdType = document.createElement('td');
+    tdType.style.cssText = 'padding:0 8px;text-align:center;user-select:none;';
+    if (isMerged) {
+      // For merged rows show a small "merged" badge instead
+    } else {
+      const badge = document.createElement('span');
+      badge.style.cssText = `font-size:0.52rem;font-weight:700;padding:2px 6px;border-radius:3px;background:${tagBg};color:${tagColor};text-transform:uppercase;letter-spacing:0.04em;white-space:nowrap;`;
+      badge.textContent = tagText;
+      tdType.appendChild(badge);
+    }
+    tr.appendChild(tdType);
 
-    // Type badge — NOT editable
-    const badge = document.createElement('span');
-    badge.style.cssText = `font-size:0.52rem;font-weight:700;padding:1px 5px;border-radius:3px;background:${tagBg};color:${tagColor};text-transform:uppercase;letter-spacing:0.04em;margin-right:6px;vertical-align:middle;user-select:none;`;
-    badge.textContent = tagText;
-    tdName.appendChild(badge);
+    // ── Col 3: Name (editable, clean) ────────────────────────────
+    const tdName = document.createElement('td');
+    tdName.className = 'pg-cell-editable';
+    tdName.setAttribute('data-row', rowIdx);
+    tdName.setAttribute('data-col', 3);
+    tdName.style.cssText = isGrouped ? 'padding-left:16px;' : '';
 
     if (isMerged) {
-      // Merged: editable name span inside a non-contenteditable td
+      tdName.colSpan = 2; // spans name + SKU
       const nameSpan = document.createElement('span');
       nameSpan.setAttribute('contenteditable','true');
       nameSpan.style.cssText = 'font-weight:500;font-size:0.875rem;outline:none;';
@@ -857,55 +912,51 @@ export function createUnifiedGrid({
       nameSpan.addEventListener('blur', () => { item.displayName = nameSpan.textContent.trim() || null; emitSummary(); });
       nameSpan.addEventListener('keydown', e => { if(e.key==='Enter'){e.preventDefault();nameSpan.blur();} });
       tdName.appendChild(nameSpan);
-
       const mergeBadge = document.createElement('span'); mergeBadge.className = 'pg-merged-badge';
       mergeBadge.innerHTML = (expandedMerges.has(item.id) ? ICONS.chevronDown : ICONS.chevronRight) + `<span>${item._mergedIdx.length} merged</span>`;
       mergeBadge.addEventListener('click', e => { e.stopPropagation(); expandedMerges.has(item.id) ? expandedMerges.delete(item.id) : expandedMerges.add(item.id); render(); });
       tdName.appendChild(mergeBadge);
-
       const unmergeBtn = document.createElement('button'); unmergeBtn.className = 'pg-unmerge-btn'; unmergeBtn.textContent = 'Unmerge';
       unmergeBtn.addEventListener('click', e => { e.stopPropagation(); unmergeItem(item); });
       tdName.appendChild(unmergeBtn);
     } else {
-      // Name: editable contenteditable span (NOT the whole td — badge stays separate)
-      const nameSpan = document.createElement('span');
-      nameSpan.setAttribute('contenteditable','true');
-      nameSpan.style.cssText = 'font-weight:500;font-size:0.875rem;color:var(--text-main);outline:none;padding:1px 3px;border-radius:3px;';
-      nameSpan.setAttribute('data-row', rowIdx);
-      nameSpan.setAttribute('data-col', 2);
-      nameSpan.textContent = dName(item);
-
+      tdName.setAttribute('contenteditable','true');
+      tdName.textContent = dName(item);
       if (modified && changes.name != null) {
-        nameSpan.style.cssText += 'background:rgba(245,158,11,0.06);';
-        const origLabel = document.createElement('span');
-        origLabel.style.cssText = 'font-size:0.65rem;color:#b45309;margin-left:6px;font-weight:400;';
-        origLabel.textContent = `was: ${changes.name}`;
-        nameSpan.insertAdjacentElement('afterend', origLabel);
+        attachChangeTip(tdName, 'name', changes.name);
       }
-
-      nameSpan.addEventListener('focus', () => nameSpan.style.boxShadow = 'inset 0 0 0 2px var(--primary)');
-      nameSpan.addEventListener('blur', () => {
-        nameSpan.style.boxShadow = '';
-        commitField(item, 'name', nameSpan.textContent); render();
+      tdName.addEventListener('mousedown', e => {
+        if (editingCell?.row===rowIdx && editingCell?.col===3) return;
+        e.preventDefault(); focusCell(rowIdx, 3);
       });
-      nameSpan.addEventListener('keydown', e => {
-        if (e.key==='Enter') { e.preventDefault(); nameSpan.blur(); }
-        if (e.key==='Escape') { nameSpan.textContent = dName(item); nameSpan.blur(); }
+      tdName.addEventListener('dblclick', () => enterEdit(rowIdx, 3));
+      tdName.addEventListener('blur', () => {
+        tdName.classList.remove('pg-cell-editing','pg-cell-focused');
+        if (editingCell?.row===rowIdx && editingCell?.col===3) {
+          commitField(item, 'name', tdName.textContent.trim()); editingCell = null; render();
+        }
       });
-      tdName.appendChild(nameSpan);
-
-      // SKU — read-only
-      if (dSku(item)) {
-        const sku = document.createElement('div');
-        sku.style.cssText = 'font-size:0.68rem;color:var(--text-secondary);font-family:monospace;margin-top:1px;';
-        sku.textContent = dSku(item);
-        tdName.appendChild(sku);
-      }
+      tdName.addEventListener('keydown', e => {
+        if (editingCell?.row!==rowIdx || editingCell?.col!==3) return;
+        if (e.key==='Enter') { e.preventDefault(); const p=exitEdit(true); if(p) setTimeout(()=>focusCell(p.row+1,p.col),0); }
+        if (e.key==='Escape') { e.preventDefault(); tdName.textContent=dName(item); exitEdit(false); focusCell(rowIdx,3); }
+        if (e.key==='Tab') { e.preventDefault(); exitEdit(true); const nc=nextEditCol(3,e.shiftKey?-1:1); if(nc!=null) setTimeout(()=>focusCell(rowIdx,nc),0); }
+      });
     }
     tr.appendChild(tdName);
 
-    // SLA (not in keyboard nav — click to open dropdown)
+    // ── Col 4: SKU / Licence number (non-editable) ───────────────
+    if (!isMerged) {
+      const tdSku = document.createElement('td');
+      tdSku.className = 'pg-cell-sku';
+      tdSku.style.cssText = 'color:var(--text-secondary);font-family:ui-monospace,monospace;font-size:0.72rem;white-space:nowrap;';
+      tdSku.textContent = dSku(item);
+      tr.appendChild(tdSku);
+    }
+
+    // ── Col 5: SLA ───────────────────────────────────────────────
     const tdSla = document.createElement('td');
+    tdSla.style.cssText = 'padding-left:16px;'; // extra gap from SKU column
     if (line?.itemType === 'servicepack') {
       const wrap = document.createElement('div'); wrap.style.cssText='display:flex;align-items:center;gap:4px;';
       const hInp = document.createElement('input'); hInp.type='number'; hInp.min='0.5'; hInp.step='0.5'; hInp.value=line.hours||0;
@@ -917,8 +968,11 @@ export function createUnifiedGrid({
     } else if (slas.length) {
       const slaTag = document.createElement('span'); slaTag.className='sla-tag'; slaTag.style.cursor='pointer';
       slaTag.textContent = curSla?.name || 'None';
-      if (modified && changes.sla != null) slaTag.style.cssText += 'border-color:#f59e0b;color:#b45309;background:#fef3c7;';
-      slaTag.title = `Click to change SLA${changes.sla != null ? ' (was: '+(_originals[item.lineIdx]?.sla ? (slas.find(s=>s.id===_originals[item.lineIdx].sla)?.name||'None') : 'None')+')' : ''}`;
+      if (modified && changes.sla != null) {
+        slaTag.style.cssText += 'border-color:#f59e0b;background:#fef3c7;color:#92400e;';
+        const origSlaName = slas.find(s=>s.id===_originals[item.lineIdx]?.sla)?.name || 'None';
+        attachChangeTip(slaTag, 'SLA', origSlaName);
+      }
       slaTag.addEventListener('click', e => { e.stopPropagation(); openSla(item, slaTag); });
       tdSla.appendChild(slaTag);
     } else {
@@ -926,37 +980,37 @@ export function createUnifiedGrid({
     }
     tr.appendChild(tdSla);
 
-    // Qty (col 5)
-    const tdQty = makeCell(item, 'qty', String(dQty(item)), rowIdx, 5);
-    if (modified && changes.qty != null) { tdQty.style.cssText += 'background:rgba(245,158,11,0.06);'; tdQty.title=`Original: ${changes.qty}`; }
+    // ── Col 6: Qty ───────────────────────────────────────────────
+    const tdQty = makeCell(item, 'qty', String(dQty(item)), rowIdx, 6);
+    if (modified && changes.qty != null) attachChangeTip(tdQty, 'qty', String(changes.qty));
     tr.appendChild(tdQty);
 
-    // Price (col 6)
-    const tdPrice = makeCell(item, 'price', dPrice(item).toFixed(2), rowIdx, 6);
-    if (modified && changes.price != null) { tdPrice.style.cssText += 'background:rgba(245,158,11,0.06);'; tdPrice.title=`Original: ${changes.price.toFixed(2)}`; }
+    // ── Col 7: Unit Price ────────────────────────────────────────
+    const tdPrice = makeCell(item, 'price', dPrice(item).toFixed(2), rowIdx, 7);
+    if (modified && changes.price != null) attachChangeTip(tdPrice, 'price', changes.price.toFixed(2));
     tr.appendChild(tdPrice);
 
-    // Margin (col 7)
-    const tdMargin = makeCell(item, 'margin', dMargin(item).toFixed(1), rowIdx, 7);
-    if (modified && changes.margin != null) { tdMargin.style.cssText += 'background:rgba(245,158,11,0.06);'; tdMargin.title=`Original: ${changes.margin.toFixed(1)}%`; }
+    // ── Col 8: Margin % ──────────────────────────────────────────
+    const tdMargin = makeCell(item, 'margin', dMargin(item).toFixed(1), rowIdx, 8);
+    if (modified && changes.margin != null) attachChangeTip(tdMargin, 'margin', changes.margin.toFixed(1) + '%');
     tr.appendChild(tdMargin);
 
-    // Total
+    // ── Col 9: Total ─────────────────────────────────────────────
     const tdT = document.createElement('td'); tdT.className='pg-cell-total'; tdT.textContent=currency(calcTotal(item)); tr.appendChild(tdT);
 
-    // Monthly
+    // ── Col 10: Monthly ──────────────────────────────────────────
     const tdM = document.createElement('td'); tdM.className='pg-cell-monthly';
     const mo = calcMonthly(item); if(mo>0) tdM.textContent=currency(mo); tr.appendChild(tdM);
 
-    // Notes (col 9)
-    tr.appendChild(makeCell(item, 'note', item.note||'', rowIdx, 9));
+    // ── Col 11: Notes ────────────────────────────────────────────
+    tr.appendChild(makeCell(item, 'note', item.note||'', rowIdx, 11));
 
-    // Actions
+    // ── Col 12: Actions ──────────────────────────────────────────
     const tdA = document.createElement('td'); tdA.className='pg-cell-actions';
     appendActions(tdA, item);
     if (modified) {
       const resetBtn = document.createElement('button');
-      resetBtn.className='pg-menu-btn'; resetBtn.innerHTML=ICONS.reset; resetBtn.title='Reset to original';
+      resetBtn.className='pg-move-btn'; resetBtn.innerHTML=ICONS.reset; resetBtn.title='Reset to original';
       resetBtn.style.cssText='color:#f59e0b;width:22px;height:22px;';
       resetBtn.addEventListener('click', e => { e.stopPropagation(); resetItem(item); });
       tdA.insertBefore(resetBtn, tdA.firstChild);
@@ -989,7 +1043,7 @@ export function createUnifiedGrid({
     // Light styling — not the black bar
     const tr = document.createElement('tr'); tr.className='subtotal-row'; tr.style.cssText='border-top:2px solid var(--border);';
     tr.appendChild(document.createElement('td')); tr.appendChild(document.createElement('td'));
-    const lbl = document.createElement('td'); lbl.colSpan=5; lbl.style.cssText='text-align:right;font-weight:700;font-size:0.875rem;padding:10px 12px;color:var(--text-main);'; lbl.textContent='Total'; tr.appendChild(lbl);
+    const lbl = document.createElement('td'); lbl.colSpan=7; lbl.style.cssText='text-align:right;font-weight:700;font-size:0.875rem;padding:10px 12px;color:var(--text-main);'; lbl.textContent='Total'; tr.appendChild(lbl);
     const tdT = document.createElement('td'); tdT.className='pg-cell-total'; tdT.style.cssText='font-weight:700;font-size:0.875rem;color:var(--text-main);'; tdT.textContent=currency(total); tr.appendChild(tdT);
     const tdM = document.createElement('td'); tdM.className='pg-cell-monthly'; tdM.style.cssText='font-weight:700;color:var(--primary);'; if(monthly>0) tdM.textContent=currency(monthly); tr.appendChild(tdM);
     tr.appendChild(document.createElement('td')); tr.appendChild(document.createElement('td'));
@@ -1057,20 +1111,23 @@ export function createUnifiedGrid({
     const thead = document.createElement('thead');
     const headRow = document.createElement('tr');
     const cols = [
-      {t:'',w:'28px'},{t:'',w:'36px'},
-      {t:'Item',w:''},
-      {t:'SLA',w:'115px'},
-      {t:'Qty',w:'70px'},
-      {t:'Unit Price',w:'110px'},
-      {t:'Margin %',w:'80px'},
-      {t:'Total',w:'115px',r:true},
-      {t:'Monthly',w:'100px',r:true},
-      {t:'Notes',w:'130px'},
-      {t:'',w:'88px'},
+      {t:'',     w:'28px'},   // drag
+      {t:'',     w:'36px'},   // checkbox
+      {t:'Type', w:'56px'},   // type badge
+      {t:'Name', w:''},       // name (editable)
+      {t:'No.',  w:'100px'},  // SKU / licence number
+      {t:'SLA',  w:'110px',pl:'16px'}, // sla (extra left gap)
+      {t:'Qty',  w:'66px'},
+      {t:'Unit Price',w:'105px'},
+      {t:'Margin %',  w:'78px'},
+      {t:'Total',     w:'110px',r:true},
+      {t:'Monthly',   w:'100px',r:true},
+      {t:'Notes',     w:'120px'},
+      {t:'',          w:'88px'},
     ];
     cols.forEach(c => {
       const th = document.createElement('th');
-      if(c.w) th.style.width=c.w; if(c.r) th.style.textAlign='right'; th.textContent=c.t;
+      if(c.w) th.style.width=c.w; if(c.r) th.style.textAlign='right'; if(c.pl) th.style.paddingLeft=c.pl; th.textContent=c.t;
       headRow.appendChild(th);
     });
     thead.appendChild(headRow); table.appendChild(thead);
@@ -1088,7 +1145,7 @@ export function createUnifiedGrid({
           if (item._mergedIdx?.length > 1 && expandedMerges.has(item.id)) {
             item._mergedIdx.forEach(li => {
               const sub = document.createElement('tr'); sub.className='pg-merged-subrow';
-              sub.innerHTML=`<td></td><td></td><td colspan="9" style="padding-left:52px;">${_lineItems[li]?.name||''}</td>`;
+              sub.innerHTML=`<td></td><td></td><td></td><td colspan="10" style="padding-left:16px;">${_lineItems[li]?.name||''}</td>`;
               tbody.appendChild(sub);
             });
           }
@@ -1102,7 +1159,7 @@ export function createUnifiedGrid({
     // Hidden rows
     hidden.forEach(item => {
       const tr = document.createElement('tr'); tr.className='hidden-row'; tr.dataset.id=item.id;
-      [null,null,dName(item),dSku(item),dQty(item),currency(dPrice(item)),dMargin(item).toFixed(1)+'%',currency(calcTotal(item)),null,null].forEach((v,i) => {
+      [null,null,null,dName(item),dSku(item),null,dQty(item),currency(dPrice(item)),dMargin(item).toFixed(1)+'%',currency(calcTotal(item)),null,null].forEach((v,i) => {
         const td = document.createElement('td'); if(v!=null) td.textContent=v; tr.appendChild(td);
       });
       const tdA = document.createElement('td');
