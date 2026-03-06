@@ -121,7 +121,8 @@ export function createUnifiedGrid({
     const line = getLine(item), orig = getOrig(item);
     if (!line || !orig) return {};
     const changes = {};
-    if (item.displayName != null && item.displayName !== orig.name) changes.name = orig.name;
+    // Compare line.name (persisted) not item.displayName (session-only)
+    if (line.name !== orig.name) changes.name = orig.name;
     if (line.amount !== orig.amount) changes.qty = orig.amount;
     if (Math.abs(line.price - orig.price) > 0.001) changes.price = orig.price;
     if (Math.abs(line.margin - orig.margin) > 0.001) changes.margin = orig.margin;
@@ -133,6 +134,7 @@ export function createUnifiedGrid({
   function resetItem(item) {
     const line = getLine(item), orig = getOrig(item);
     if (!line || !orig) return;
+    line.name    = orig.name;
     line.amount  = orig.amount;
     line.price   = orig.price;
     line.margin  = orig.margin;
@@ -235,15 +237,20 @@ export function createUnifiedGrid({
 
   function loadItems(lineItems = [], groups = []) {
     _lineItems = lineItems.map(l => ({ ...l }));
-    // Restore persisted originals if present; fall back to current values for old quotes
-    _originals = lineItems.map(l => ({
-      ...l,
-      name:   l._origName   ?? l.name,
-      price:  l._origPrice  ?? l.price,
-      amount: l._origQty    ?? l.amount,
-      margin: l._origMargin ?? l.margin,
-      sla:    l._origSla    ?? l.sla,
-    }));
+    // Restore persisted originals if present.
+    // For old quotes without _orig* fields, fall back to license catalog price
+    // so indicators still work against what the license originally cost.
+    _originals = lineItems.map(l => {
+      const lic = (l.itemType !== 'servicepack') ? licenses.find(lc => lc.id === l.licenseId) : null;
+      return {
+        ...l,
+        name:   l._origName   ?? lic?.name          ?? l.name,
+        price:  l._origPrice  ?? lic?.initial_price  ?? l.price,
+        amount: l._origQty    ?? l.amount,
+        margin: l._origMargin ?? l.margin,
+        sla:    l._origSla    ?? l.sla,
+      };
+    });
     _items = [];
     groups.forEach((g, i) => {
       _items.push({ id: g.id || gid('h'), type: 'header', displayName: g.name || g.description || 'Group', hidden: false, order: i });
@@ -1102,6 +1109,7 @@ export function createUnifiedGrid({
 
     // ── Col 7: Margin % ───────────────────────────────────────────
     const tdMargin=makeCell(item,'margin',dMargin(item).toFixed(1),rowIdx,7);
+    tdMargin.style.textAlign='right';
     if(modified&&changes.margin!=null) attachChangeTip(tdMargin,'margin',changes.margin.toFixed(1)+'%');
     tr.appendChild(tdMargin);
 
@@ -1237,8 +1245,8 @@ export function createUnifiedGrid({
       {t:'Name',      w:'160px'},
       {t:'SLA',       w:'102px',pl:'14px'}, // matches tdSla padding-left:14px
       {t:'Qty',       w:'50px'},
-      {t:'Unit Price',w:'86px'},
-      {t:'Margin %',  w:'58px'},
+      {t:'Unit Price',w:'86px',r:true},
+      {t:'Margin %',  w:'58px',r:true},
       {t:'Total',     w:'86px',r:true},
       {t:'Monthly',   w:'78px',r:true},
       {t:'',          w:'28px'},   // notes button
