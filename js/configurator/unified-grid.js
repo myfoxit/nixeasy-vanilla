@@ -147,7 +147,9 @@ export function createUnifiedGrid({
     if (!line || line.itemType === 'servicepack') return [];
     const lic = licenses.find(l => l.id === line.licenseId);
     if (!lic?.depends_on?.length) return [];
-    const presentIds = new Set(_lineItems.map(l => l.licenseId));
+    // Use only currently visible items (deleted items removed from _items but not _lineItems)
+    const visIdxs = new Set(_items.filter(i => i.type === 'item' && !i.hidden).map(i => i.lineIdx));
+    const presentIds = new Set(_lineItems.filter((_, idx) => visIdxs.has(idx)).map(l => l.licenseId));
     return lic.depends_on.filter(id => !presentIds.has(id))
       .map(id => licenses.find(l => l.id === id)).filter(Boolean);
   }
@@ -248,7 +250,8 @@ export function createUnifiedGrid({
     });
     _items = [];
     groups.forEach((g, i) => {
-      _items.push({ id: g.id || gid('h'), type: 'header', displayName: g.name || g.description || 'Group', hidden: false, order: i });
+      // Use saved order if present so groups appear in the right interleaved position
+      _items.push({ id: g.id || gid('h'), type: 'header', displayName: g.name || g.description || 'Group', hidden: false, order: g.order ?? i });
     });
     lineItems.forEach((line, i) => {
       const groupId = line.containerId || line.groupId || null;
@@ -256,7 +259,9 @@ export function createUnifiedGrid({
       _items.push({
         id: gid('i'), type: 'item', lineIdx: i,
         displayName: null, displayQty: null, displayPrice: null, displayMargin: null,
-        note: line.note || '', hidden: false, order: groups.length + i, groupId: resolvedGroup,
+        note: line.note || '', hidden: false,
+        order: line._order ?? (groups.length + i),  // restore saved display position
+        groupId: resolvedGroup,
       });
     });
     reindex(); render(); emitSummary();
@@ -265,11 +270,13 @@ export function createUnifiedGrid({
   function getLineItems() {
     return _lineItems.map((line, idx) => {
       const displayItem = _items.find(it => it.type === 'item' && it.lineIdx === idx && !it.hidden);
-      return { ...line, containerId: displayItem?.groupId || null };
+      // _order persists the display position so loadItems can restore interleaved group/item layout
+      return { ...line, containerId: displayItem?.groupId || null, _order: displayItem?.order ?? null };
     });
   }
   function getGroups() {
-    return vis().filter(i => i.type === 'header').map(h => ({ id: h.id, name: h.displayName || 'Group' }));
+    // Include order so loadItems can restore interleaved group/item positions
+    return vis().filter(i => i.type === 'header').map(h => ({ id: h.id, name: h.displayName || 'Group', order: h.order }));
   }
   function getSummary() {
     let hk = 0, vk = 0, monthly = 0;
@@ -371,9 +378,6 @@ export function createUnifiedGrid({
           items.push({ icon: ICONS.group, label: `Move to "${h.displayName}"`, fn: () => { item.groupId = h.id; reindex(); render(); } }));
       }
       items.push('sep');
-      items.push({ icon: ICONS.plus,      label: 'Insert Empty Row Above', fn: () => insertEmpty(item, 'above') });
-      items.push({ icon: ICONS.plus,      label: 'Insert Empty Row Below', fn: () => insertEmpty(item, 'below') });
-      items.push({ icon: ICONS.duplicate, label: 'Duplicate Row',          fn: () => duplicateItem(item) });
       items.push({ icon: ICONS.trash,     label: 'Delete Row',             fn: () => softDelete(item), danger: true });
       if (isModified(item)) items.push({ icon: ICONS.reset, label: 'Reset to Original', fn: () => resetItem(item) });
       if (idx > 0 && visible[idx-1].type === 'item')              items.push({ icon: ICONS.merge, label: 'Merge with Above', fn: () => mergeTwo(item, visible[idx-1]) });
@@ -382,8 +386,6 @@ export function createUnifiedGrid({
       items.push({ icon: ICONS.moveTop,    label: 'Move to Top',    fn: () => moveEdge(item, 'top') });
       items.push({ icon: ICONS.moveBottom, label: 'Move to Bottom', fn: () => moveEdge(item, 'bottom') });
     } else {
-      items.push({ icon: ICONS.plus,      label: 'Insert Empty Row Below', fn: () => insertEmpty(item, 'below') });
-      items.push({ icon: ICONS.duplicate, label: 'Duplicate Group',        fn: () => duplicateItem(item) });
       items.push({ icon: ICONS.trash,     label: 'Delete Group',           fn: () => softDelete(item), danger: true });
       items.push('sep');
       items.push({ icon: ICONS.moveTop,    label: 'Move to Top',    fn: () => moveEdge(item, 'top') });
@@ -895,7 +897,7 @@ export function createUnifiedGrid({
     setTimeout(() => ta.focus(), 50);
   }
 
-  function buildHeaderRow(item, sectionItems, rowIdx) {
+  function buildHeaderRow(item, sectionItems, rowIdx, groupColor) {
     const isCollapsed = collapsedGroups.has(item.id);
     const subtotal  = sectionItems.reduce((s,i) => s+calcTotal(i), 0);
     const subMonthly = sectionItems.reduce((s,i) => s+calcMonthly(i), 0);
@@ -906,8 +908,9 @@ export function createUnifiedGrid({
     tr.draggable = true;
     if (selectedRows.has(item.id)) tr.classList.add('selected-row');
 
-    // Drag
+    // Drag — carries the group color stripe on header rows
     const tdDrag = document.createElement('td'); tdDrag.className = 'pg-col-drag';
+    if (groupColor) tdDrag.style.borderLeft = `4px solid ${groupColor}`;
     tdDrag.innerHTML = `<span class="pg-drag-handle">${ICONS.grip}</span>`; tr.appendChild(tdDrag);
 
     // Checkbox
@@ -959,7 +962,7 @@ export function createUnifiedGrid({
     return tr;
   }
 
-  function buildItemRow(item, isGrouped, rowIdx) {
+  function buildItemRow(item, isGrouped, rowIdx, groupColor) {
     const line   = getLine(item);
     const orig   = getOrig(item);
     const lic    = (line && line.itemType !== 'servicepack') ? licenses.find(l => l.id === line.licenseId) : null;
@@ -981,6 +984,7 @@ export function createUnifiedGrid({
 
     // Drag
     const tdDrag = document.createElement('td'); tdDrag.className = 'pg-col-drag';
+    if (isGrouped && groupColor) tdDrag.style.borderLeft = `3px solid ${groupColor}`;
     tdDrag.innerHTML = `<span class="pg-drag-handle">${ICONS.grip}</span>`; tr.appendChild(tdDrag);
 
     // Checkbox + modified dot
@@ -1261,12 +1265,17 @@ export function createUnifiedGrid({
     const sections = getSections(visible);
     let rowIdx = 0, grandTotal = 0, grandMonthly = 0;
 
+    // Distinct blue shades — one per group, cycles if more than 8 groups
+    const GROUP_COLORS = ['#2563eb','#0284c7','#0891b2','#1d4ed8','#0369a1','#075985','#1e40af','#164e63'];
+    let groupColorIdx = 0;
+
     sections.forEach(section => {
-      if (section.header) tbody.appendChild(buildHeaderRow(section.header, section.items, rowIdx++));
+      const groupColor = section.header ? GROUP_COLORS[groupColorIdx % GROUP_COLORS.length] : null;
+      if (section.header) { tbody.appendChild(buildHeaderRow(section.header, section.items, rowIdx++, groupColor)); groupColorIdx++; }
       const collapsed = section.header && collapsedGroups.has(section.header.id);
       section.items.forEach(item => {
         if (!collapsed) {
-          tbody.appendChild(buildItemRow(item, !!section.header, rowIdx));
+          tbody.appendChild(buildItemRow(item, !!section.header, rowIdx, groupColor));
           if (item._mergedIdx?.length > 1 && expandedMerges.has(item.id)) {
             item._mergedIdx.forEach(li => {
               const sub = document.createElement('tr'); sub.className='pg-merged-subrow';
