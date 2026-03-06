@@ -1204,23 +1204,28 @@ export function createUnifiedGrid({
     // Thead
     const thead = document.createElement('thead');
     const headRow = document.createElement('tr');
+    // Fixed layout: total must fit the right panel (~860px after catalog)
+    // Drag(22)+Check(30)+Type(88)+Name(160)+SLA(102)+Qty(50)+Price(86)+Margin(58)+Total(86)+Monthly(78)+Notes(28)+Actions(62) = 850px
     const cols = [
-      {t:'',          w:'28px'},   // drag
-      {t:'',          w:'36px'},   // checkbox
-      {t:'Type / No.',w:'120px'},  // type badge + sku
-      {t:'Name',      w:''},       // name (editable)
-      {t:'SLA',       w:'130px',pl:'14px'}, // wider + left gap
-      {t:'Qty',       w:'66px'},
-      {t:'Unit Price',w:'105px'},
-      {t:'Margin %',  w:'78px'},
-      {t:'Total',     w:'110px',r:true},
-      {t:'Monthly',   w:'100px',r:true},
-      {t:'',          w:'36px'},   // notes button
-      {t:'',          w:'80px'},   // actions
+      {t:'',          w:'22px'},   // drag
+      {t:'',          w:'30px'},   // checkbox
+      {t:'Type / No.',w:'88px'},   // type badge + sku
+      {t:'Name',      w:'160px'},  // name (editable)
+      {t:'SLA',       w:'102px',pl:'12px'},
+      {t:'Qty',       w:'50px'},
+      {t:'Unit Price',w:'86px'},
+      {t:'Margin %',  w:'58px'},
+      {t:'Total',     w:'86px',r:true},
+      {t:'Monthly',   w:'78px',r:true},
+      {t:'',          w:'28px'},   // notes button
+      {t:'',          w:'62px'},   // actions
     ];
     cols.forEach(c => {
       const th = document.createElement('th');
-      if(c.w) th.style.width=c.w; if(c.r) th.style.textAlign='right'; if(c.pl) th.style.paddingLeft=c.pl; th.textContent=c.t;
+      if(c.w) th.style.width=c.w;
+      if(c.r) th.style.textAlign='right';
+      if(c.pl) th.style.paddingLeft=c.pl;
+      th.textContent=c.t;
       headRow.appendChild(th);
     });
     thead.appendChild(headRow); table.appendChild(thead);
