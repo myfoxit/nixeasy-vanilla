@@ -241,7 +241,7 @@ export function createUnifiedGrid({
       _items.push({
         id: gid('i'), type: 'item', lineIdx: i,
         displayName: null, displayQty: null, displayPrice: null, displayMargin: null,
-        note: '', hidden: false, order: groups.length + i, groupId: resolvedGroup,
+        note: line.note || '', hidden: false, order: groups.length + i, groupId: resolvedGroup,
       });
     });
     reindex(); render(); emitSummary();
@@ -280,9 +280,15 @@ export function createUnifiedGrid({
     const line = getLine(item); if (!line) return;
     if (field === 'name') {
       const v = raw.trim();
-      item.displayName = (v === '' || v === (getOrig(item)?.name || line.name)) ? null : v;
+      if (v === '' || v === (getOrig(item)?.name || line.name)) {
+        item.displayName = null;         // reverted — leave line.name as-is
+      } else {
+        item.displayName = v;
+        line.name = v;                   // persist into _lineItems so save() picks it up
+      }
     } else if (field === 'note') {
       item.note = raw;
+      if (line) line.note = raw;
     } else if (['qty','price','margin'].includes(field)) {
       // Strip currency symbol and thousands separators before parsing
       const n = parseFloat(raw.replace(/[^0-9.,-]/g, '').replace(',', '.'));
@@ -860,7 +866,12 @@ export function createUnifiedGrid({
     const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-secondary btn-sm'; cancelBtn.textContent = 'Cancel';
     cancelBtn.addEventListener('click', () => overlay.remove());
     const saveBtn = document.createElement('button'); saveBtn.className = 'btn btn-primary btn-sm'; saveBtn.textContent = 'Save Note';
-    saveBtn.addEventListener('click', () => { item.note = ta.value.trim(); overlay.remove(); render(); });
+    saveBtn.addEventListener('click', () => {
+      const v = ta.value.trim();
+      item.note = v;
+      const l = getLine(item); if (l) l.note = v;
+      overlay.remove(); emitSummary(); render();
+    });
     footer.appendChild(cancelBtn); footer.appendChild(saveBtn); modal.appendChild(footer);
 
     overlay.appendChild(modal);
