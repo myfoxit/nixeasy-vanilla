@@ -1410,13 +1410,9 @@
   color: var(--text-secondary);
 }
 
-/* Grouped item rows — indented under their header */
-.presentation-grid .grouped-item td:nth-child(3) {
-  padding-left: 44px;
-}
-
+/* Grouped item rows — indent applied inline in JS now, just add left accent */
 .presentation-grid .grouped-item td:first-child {
-  border-left: 2px solid var(--primary);
+  border-left: 3px solid var(--primary);
 }
 
 /* Wizard Steps */

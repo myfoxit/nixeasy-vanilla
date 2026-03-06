@@ -32,9 +32,9 @@ const ICONS = {
 };
 
 // Column layout:
-// 0=drag 1=check 2=type-badge 3=name 4=sku 5=sla  6=qty 7=price 8=margin 9=total 10=monthly 11=notes 12=actions
-const EDIT_COLS = [3, 6, 7, 8, 11]; // name, qty, price, margin, notes
-const COL_COUNT = 13;
+// 0=drag 1=check 2=type+sku 3=name 4=sla 5=qty 6=price 7=margin 8=total 9=monthly 10=notes-btn 11=actions
+const EDIT_COLS = [3, 5, 6, 7]; // name, qty, price, margin (notes is a modal button now)
+const COL_COUNT = 12;
 
 export function createUnifiedGrid({
   licenses = [],
@@ -782,6 +782,45 @@ export function createUnifiedGrid({
     td.addEventListener('mouseleave', () => document.getElementById('ug-tip')?.remove());
   }
 
+  function openNotesModal(item) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;animation:pe-fadeIn 0.15s ease-out;';
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--surface);border-radius:12px;padding:24px;width:500px;max-width:90vw;box-shadow:var(--shadow-lg);border:1px solid var(--border);';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;';
+    const title = document.createElement('h3');
+    title.style.cssText = 'margin:0;font-size:0.95rem;color:var(--text-main);font-weight:600;';
+    title.textContent = `Notes — ${dName(item) || 'Row'}`;
+    const closeX = document.createElement('button');
+    closeX.className = 'btn btn-ghost btn-sm'; closeX.innerHTML = '&times;'; closeX.style.fontSize = '1.2rem';
+    closeX.addEventListener('click', () => overlay.remove());
+    header.appendChild(title); header.appendChild(closeX); modal.appendChild(header);
+
+    const ta = document.createElement('textarea');
+    ta.value = item.note || '';
+    ta.placeholder = 'Add internal notes for this item…';
+    ta.style.cssText = 'width:100%;height:160px;resize:vertical;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:0.875rem;background:var(--bg);color:var(--text-main);box-sizing:border-box;outline:none;font-family:inherit;line-height:1.5;';
+    ta.addEventListener('focus', () => ta.style.borderColor = 'var(--primary)');
+    ta.addEventListener('blur',  () => ta.style.borderColor = 'var(--border)');
+    modal.appendChild(ta);
+
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:14px;';
+    const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-secondary btn-sm'; cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => overlay.remove());
+    const saveBtn = document.createElement('button'); saveBtn.className = 'btn btn-primary btn-sm'; saveBtn.textContent = 'Save Note';
+    saveBtn.addEventListener('click', () => { item.note = ta.value.trim(); overlay.remove(); render(); });
+    footer.appendChild(cancelBtn); footer.appendChild(saveBtn); modal.appendChild(footer);
+
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+    setTimeout(() => ta.focus(), 50);
+  }
+
   function buildHeaderRow(item, sectionItems, rowIdx) {
     const isCollapsed = collapsedGroups.has(item.id);
     const subtotal  = sectionItems.reduce((s,i) => s+calcTotal(i), 0);
@@ -803,9 +842,10 @@ export function createUnifiedGrid({
     cb.addEventListener('click', e => { e.stopPropagation(); handleCheck(item.id, cb.checked, e.shiftKey); });
     tdCheck.appendChild(cb); tr.appendChild(tdCheck);
 
-    // Name (spans type + name + sku + sla + qty + price + margin = 7 cols)
-    const tdName = document.createElement('td'); tdName.colSpan = 7; tdName.className = 'pg-cell-header-name';
-    const chev = document.createElement('span'); chev.className = 'pg-group-chevron'; chev.style.cursor='pointer';
+    // Name spans type+sku, name, sla, qty, price, margin = 6 cols
+    const tdName = document.createElement('td'); tdName.colSpan = 6; tdName.className = 'pg-cell-header-name';
+    const chev = document.createElement('button');
+    chev.style.cssText = 'background:none;border:none;cursor:pointer;padding:0;margin-right:8px;display:inline-flex;align-items:center;color:var(--text-secondary);vertical-align:middle;flex-shrink:0;';
     chev.innerHTML = isCollapsed
       ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>'
       : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
@@ -883,137 +923,139 @@ export function createUnifiedGrid({
     }
     tr.appendChild(tdCheck);
 
-    // ── Col 2: Type badge (non-editable, own cell) ───────────────
-    const tdType = document.createElement('td');
-    tdType.style.cssText = 'padding:0 8px;text-align:center;user-select:none;';
+    // ── Col 2: Type + SKU combined cell ──────────────────────────
+    const tdTypeSku = document.createElement('td');
+    tdTypeSku.style.cssText = 'padding:0 10px;white-space:nowrap;user-select:none;';
     if (isMerged) {
-      // For merged rows show a small "merged" badge instead
+      const mb = document.createElement('span'); mb.className='pg-merged-badge'; mb.style.display='block';
+      mb.innerHTML=`<span>${item._mergedIdx?.length||2} merged</span>`;
+      tdTypeSku.appendChild(mb);
     } else {
-      const badge = document.createElement('span');
-      badge.style.cssText = `font-size:0.52rem;font-weight:700;padding:2px 6px;border-radius:3px;background:${tagBg};color:${tagColor};text-transform:uppercase;letter-spacing:0.04em;white-space:nowrap;`;
+      const badge = document.createElement('div');
+      badge.style.cssText = `display:inline-block;font-size:0.52rem;font-weight:700;padding:2px 6px;border-radius:3px;background:${tagBg};color:${tagColor};text-transform:uppercase;letter-spacing:0.04em;white-space:nowrap;margin-bottom:3px;`;
       badge.textContent = tagText;
-      tdType.appendChild(badge);
+      tdTypeSku.appendChild(badge);
+      if (dSku(item)) {
+        const sku = document.createElement('div');
+        sku.style.cssText = 'font-size:0.65rem;color:var(--text-secondary);font-family:ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;max-width:110px;';
+        sku.textContent = dSku(item);
+        tdTypeSku.appendChild(sku);
+      }
     }
-    tr.appendChild(tdType);
+    tr.appendChild(tdTypeSku);
 
-    // ── Col 3: Name (editable, clean) ────────────────────────────
+    // ── Col 3: Name (editable) ────────────────────────────────────
     const tdName = document.createElement('td');
     tdName.className = 'pg-cell-editable';
     tdName.setAttribute('data-row', rowIdx);
     tdName.setAttribute('data-col', 3);
-    tdName.style.cssText = isGrouped ? 'padding-left:16px;' : '';
-
-    if (isMerged) {
-      tdName.colSpan = 2; // spans name + SKU
-      const nameSpan = document.createElement('span');
-      nameSpan.setAttribute('contenteditable','true');
-      nameSpan.style.cssText = 'font-weight:500;font-size:0.875rem;outline:none;';
-      nameSpan.textContent = dName(item);
-      nameSpan.addEventListener('blur', () => { item.displayName = nameSpan.textContent.trim() || null; emitSummary(); });
-      nameSpan.addEventListener('keydown', e => { if(e.key==='Enter'){e.preventDefault();nameSpan.blur();} });
-      tdName.appendChild(nameSpan);
-      const mergeBadge = document.createElement('span'); mergeBadge.className = 'pg-merged-badge';
-      mergeBadge.innerHTML = (expandedMerges.has(item.id) ? ICONS.chevronDown : ICONS.chevronRight) + `<span>${item._mergedIdx.length} merged</span>`;
-      mergeBadge.addEventListener('click', e => { e.stopPropagation(); expandedMerges.has(item.id) ? expandedMerges.delete(item.id) : expandedMerges.add(item.id); render(); });
-      tdName.appendChild(mergeBadge);
-      const unmergeBtn = document.createElement('button'); unmergeBtn.className = 'pg-unmerge-btn'; unmergeBtn.textContent = 'Unmerge';
-      unmergeBtn.addEventListener('click', e => { e.stopPropagation(); unmergeItem(item); });
-      tdName.appendChild(unmergeBtn);
-    } else {
-      tdName.setAttribute('contenteditable','true');
-      tdName.textContent = dName(item);
-      if (modified && changes.name != null) {
-        attachChangeTip(tdName, 'name', changes.name);
-      }
-      tdName.addEventListener('mousedown', e => {
-        if (editingCell?.row===rowIdx && editingCell?.col===3) return;
-        e.preventDefault(); focusCell(rowIdx, 3);
-      });
-      tdName.addEventListener('dblclick', () => enterEdit(rowIdx, 3));
-      tdName.addEventListener('blur', () => {
-        tdName.classList.remove('pg-cell-editing','pg-cell-focused');
-        if (editingCell?.row===rowIdx && editingCell?.col===3) {
-          commitField(item, 'name', tdName.textContent.trim()); editingCell = null; render();
-        }
-      });
-      tdName.addEventListener('keydown', e => {
-        if (editingCell?.row!==rowIdx || editingCell?.col!==3) return;
-        if (e.key==='Enter') { e.preventDefault(); const p=exitEdit(true); if(p) setTimeout(()=>focusCell(p.row+1,p.col),0); }
-        if (e.key==='Escape') { e.preventDefault(); tdName.textContent=dName(item); exitEdit(false); focusCell(rowIdx,3); }
-        if (e.key==='Tab') { e.preventDefault(); exitEdit(true); const nc=nextEditCol(3,e.shiftKey?-1:1); if(nc!=null) setTimeout(()=>focusCell(rowIdx,nc),0); }
-      });
+    // Bigger indentation for grouped items + subtle left guide line
+    if (isGrouped) {
+      tdName.style.cssText = 'padding-left:28px;border-left:2px solid var(--primary-light);';
     }
+
+    tdName.setAttribute('contenteditable', 'true');
+    tdName.textContent = dName(item);
+    if (modified && changes.name != null) attachChangeTip(tdName, 'name', changes.name);
+    if (isMerged) {
+      const mergeBadge = document.createElement('span'); mergeBadge.className='pg-merged-badge';
+      mergeBadge.style.marginLeft='6px';
+      mergeBadge.innerHTML=(expandedMerges.has(item.id)?ICONS.chevronDown:ICONS.chevronRight)+`<span>${item._mergedIdx.length} merged</span>`;
+      mergeBadge.addEventListener('click', e=>{e.stopPropagation();expandedMerges.has(item.id)?expandedMerges.delete(item.id):expandedMerges.add(item.id);render();});
+      tdName.appendChild(mergeBadge);
+      const unmergeBtn=document.createElement('button');unmergeBtn.className='pg-unmerge-btn';unmergeBtn.textContent='Unmerge';
+      unmergeBtn.addEventListener('click',e=>{e.stopPropagation();unmergeItem(item);});
+      tdName.appendChild(unmergeBtn);
+    }
+    tdName.addEventListener('mousedown', e=>{
+      if(editingCell?.row===rowIdx&&editingCell?.col===3) return;
+      e.preventDefault();focusCell(rowIdx,3);
+    });
+    tdName.addEventListener('dblclick',()=>enterEdit(rowIdx,3));
+    tdName.addEventListener('blur',()=>{
+      tdName.classList.remove('pg-cell-editing','pg-cell-focused');
+      if(editingCell?.row===rowIdx&&editingCell?.col===3){
+        commitField(item,'name',tdName.textContent.trim());editingCell=null;render();
+      }
+    });
+    tdName.addEventListener('keydown',e=>{
+      if(editingCell?.row!==rowIdx||editingCell?.col!==3) return;
+      if(e.key==='Enter'){e.preventDefault();const p=exitEdit(true);if(p)setTimeout(()=>focusCell(p.row+1,p.col),0);}
+      if(e.key==='Escape'){e.preventDefault();tdName.textContent=dName(item);exitEdit(false);focusCell(rowIdx,3);}
+      if(e.key==='Tab'){e.preventDefault();exitEdit(true);const nc=nextEditCol(3,e.shiftKey?-1:1);if(nc!=null)setTimeout(()=>focusCell(rowIdx,nc),0);}
+    });
     tr.appendChild(tdName);
 
-    // ── Col 4: SKU / Licence number (non-editable) ───────────────
-    if (!isMerged) {
-      const tdSku = document.createElement('td');
-      tdSku.className = 'pg-cell-sku';
-      tdSku.style.cssText = 'color:var(--text-secondary);font-family:ui-monospace,monospace;font-size:0.72rem;white-space:nowrap;';
-      tdSku.textContent = dSku(item);
-      tr.appendChild(tdSku);
-    }
-
-    // ── Col 5: SLA ───────────────────────────────────────────────
+    // ── Col 4: SLA ────────────────────────────────────────────────
     const tdSla = document.createElement('td');
-    tdSla.style.cssText = 'padding-left:16px;'; // extra gap from SKU column
+    tdSla.style.cssText = 'padding-left:14px;'; // gap
     if (line?.itemType === 'servicepack') {
-      const wrap = document.createElement('div'); wrap.style.cssText='display:flex;align-items:center;gap:4px;';
-      const hInp = document.createElement('input'); hInp.type='number'; hInp.min='0.5'; hInp.step='0.5'; hInp.value=line.hours||0;
+      const wrap=document.createElement('div');wrap.style.cssText='display:flex;align-items:center;gap:4px;';
+      const hInp=document.createElement('input');hInp.type='number';hInp.min='0.5';hInp.step='0.5';hInp.value=line.hours||0;
       hInp.style.cssText='width:52px;padding:3px 6px;font-size:0.8rem;background:var(--surface);color:var(--text-main);border:1px solid var(--border);border-radius:4px;';
-      hInp.addEventListener('change', e => { line.hours=parseFloat(e.target.value)||0; line.price=line.hours*hourlyRate; emitSummary(); render(); });
+      hInp.addEventListener('change',e=>{line.hours=parseFloat(e.target.value)||0;line.price=line.hours*hourlyRate;emitSummary();render();});
       wrap.appendChild(hInp);
-      const lbl = document.createElement('span'); lbl.style.cssText='font-size:0.7rem;color:var(--text-secondary);'; lbl.textContent='hrs';
-      wrap.appendChild(lbl); tdSla.appendChild(wrap);
+      const lbl=document.createElement('span');lbl.style.cssText='font-size:0.7rem;color:var(--text-secondary);';lbl.textContent='hrs';
+      wrap.appendChild(lbl);tdSla.appendChild(wrap);
     } else if (slas.length) {
-      const slaTag = document.createElement('span'); slaTag.className='sla-tag'; slaTag.style.cursor='pointer';
-      slaTag.textContent = curSla?.name || 'None';
-      if (modified && changes.sla != null) {
-        slaTag.style.cssText += 'border-color:#f59e0b;background:#fef3c7;color:#92400e;';
-        const origSlaName = slas.find(s=>s.id===_originals[item.lineIdx]?.sla)?.name || 'None';
-        attachChangeTip(slaTag, 'SLA', origSlaName);
+      const slaTag=document.createElement('span');slaTag.className='sla-tag';
+      slaTag.style.cssText='cursor:pointer;max-width:none;display:inline-block;'; // no max-width truncation
+      slaTag.textContent=curSla?.name||'None';
+      if(modified&&changes.sla!=null){
+        slaTag.style.cssText+='border-color:#f59e0b;background:#fef3c7;color:#92400e;';
+        const origSlaName=slas.find(s=>s.id===_originals[item.lineIdx]?.sla)?.name||'None';
+        attachChangeTip(slaTag,'SLA',origSlaName);
       }
-      slaTag.addEventListener('click', e => { e.stopPropagation(); openSla(item, slaTag); });
+      slaTag.addEventListener('click',e=>{e.stopPropagation();openSla(item,slaTag);});
       tdSla.appendChild(slaTag);
     } else {
-      tdSla.innerHTML = '<span style="font-size:0.8rem;color:var(--text-secondary);">—</span>';
+      tdSla.innerHTML='<span style="font-size:0.8rem;color:var(--text-secondary);">—</span>';
     }
     tr.appendChild(tdSla);
 
-    // ── Col 6: Qty ───────────────────────────────────────────────
-    const tdQty = makeCell(item, 'qty', String(dQty(item)), rowIdx, 6);
-    if (modified && changes.qty != null) attachChangeTip(tdQty, 'qty', String(changes.qty));
+    // ── Col 5: Qty ────────────────────────────────────────────────
+    const tdQty=makeCell(item,'qty',String(dQty(item)),rowIdx,5);
+    if(modified&&changes.qty!=null) attachChangeTip(tdQty,'qty',String(changes.qty));
     tr.appendChild(tdQty);
 
-    // ── Col 7: Unit Price ────────────────────────────────────────
-    const tdPrice = makeCell(item, 'price', dPrice(item).toFixed(2), rowIdx, 7);
-    if (modified && changes.price != null) attachChangeTip(tdPrice, 'price', changes.price.toFixed(2));
+    // ── Col 6: Unit Price ─────────────────────────────────────────
+    const tdPrice=makeCell(item,'price',dPrice(item).toFixed(2),rowIdx,6);
+    if(modified&&changes.price!=null) attachChangeTip(tdPrice,'price',changes.price.toFixed(2));
     tr.appendChild(tdPrice);
 
-    // ── Col 8: Margin % ──────────────────────────────────────────
-    const tdMargin = makeCell(item, 'margin', dMargin(item).toFixed(1), rowIdx, 8);
-    if (modified && changes.margin != null) attachChangeTip(tdMargin, 'margin', changes.margin.toFixed(1) + '%');
+    // ── Col 7: Margin % ───────────────────────────────────────────
+    const tdMargin=makeCell(item,'margin',dMargin(item).toFixed(1),rowIdx,7);
+    if(modified&&changes.margin!=null) attachChangeTip(tdMargin,'margin',changes.margin.toFixed(1)+'%');
     tr.appendChild(tdMargin);
 
-    // ── Col 9: Total ─────────────────────────────────────────────
-    const tdT = document.createElement('td'); tdT.className='pg-cell-total'; tdT.textContent=currency(calcTotal(item)); tr.appendChild(tdT);
+    // ── Col 8: Total ──────────────────────────────────────────────
+    const tdT=document.createElement('td');tdT.className='pg-cell-total';tdT.textContent=currency(calcTotal(item));tr.appendChild(tdT);
 
-    // ── Col 10: Monthly ──────────────────────────────────────────
-    const tdM = document.createElement('td'); tdM.className='pg-cell-monthly';
-    const mo = calcMonthly(item); if(mo>0) tdM.textContent=currency(mo); tr.appendChild(tdM);
+    // ── Col 9: Monthly ────────────────────────────────────────────
+    const tdM=document.createElement('td');tdM.className='pg-cell-monthly';
+    const mo=calcMonthly(item);if(mo>0)tdM.textContent=currency(mo);tr.appendChild(tdM);
 
-    // ── Col 11: Notes ────────────────────────────────────────────
-    tr.appendChild(makeCell(item, 'note', item.note||'', rowIdx, 11));
+    // ── Col 10: Notes button ──────────────────────────────────────
+    const tdNotes=document.createElement('td');tdNotes.style.cssText='text-align:center;padding:0 4px;';
+    const hasNote=!!(item.note&&item.note.trim());
+    const notesBtn=document.createElement('button');notesBtn.className='pg-menu-btn';
+    notesBtn.title=hasNote?item.note:'Add note';
+    notesBtn.style.cssText=`color:${hasNote?'var(--primary)':'var(--text-secondary)'};width:28px;height:28px;`;
+    notesBtn.innerHTML=`<svg viewBox="0 0 24 24" fill="${hasNote?'none':'none'}" stroke="currentColor" stroke-width="1.5" style="width:15px;height:15px;${hasNote?'color:var(--primary)':''}">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/>
+    </svg>${hasNote?'<span style="position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:var(--primary);"></span>':''}`;
+    notesBtn.style.position='relative';
+    notesBtn.addEventListener('click',e=>{e.stopPropagation();openNotesModal(item);});
+    tdNotes.appendChild(notesBtn);tr.appendChild(tdNotes);
 
-    // ── Col 12: Actions ──────────────────────────────────────────
-    const tdA = document.createElement('td'); tdA.className='pg-cell-actions';
-    appendActions(tdA, item);
-    if (modified) {
-      const resetBtn = document.createElement('button');
-      resetBtn.className='pg-move-btn'; resetBtn.innerHTML=ICONS.reset; resetBtn.title='Reset to original';
+    // ── Col 11: Actions ───────────────────────────────────────────
+    const tdA=document.createElement('td');tdA.className='pg-cell-actions';
+    appendActions(tdA,item);
+    if(modified){
+      const resetBtn=document.createElement('button');resetBtn.className='pg-move-btn';resetBtn.innerHTML=ICONS.reset;resetBtn.title='Reset to original';
       resetBtn.style.cssText='color:#f59e0b;width:22px;height:22px;';
-      resetBtn.addEventListener('click', e => { e.stopPropagation(); resetItem(item); });
-      tdA.insertBefore(resetBtn, tdA.firstChild);
+      resetBtn.addEventListener('click',e=>{e.stopPropagation();resetItem(item);});
+      tdA.insertBefore(resetBtn,tdA.firstChild);
     }
     tr.appendChild(tdA);
 
@@ -1043,7 +1085,7 @@ export function createUnifiedGrid({
     // Light styling — not the black bar
     const tr = document.createElement('tr'); tr.className='subtotal-row'; tr.style.cssText='border-top:2px solid var(--border);';
     tr.appendChild(document.createElement('td')); tr.appendChild(document.createElement('td'));
-    const lbl = document.createElement('td'); lbl.colSpan=7; lbl.style.cssText='text-align:right;font-weight:700;font-size:0.875rem;padding:10px 12px;color:var(--text-main);'; lbl.textContent='Total'; tr.appendChild(lbl);
+    const lbl = document.createElement('td'); lbl.colSpan=6; lbl.style.cssText='text-align:right;font-weight:700;font-size:0.875rem;padding:10px 12px;color:var(--text-main);'; lbl.textContent='Total'; tr.appendChild(lbl);
     const tdT = document.createElement('td'); tdT.className='pg-cell-total'; tdT.style.cssText='font-weight:700;font-size:0.875rem;color:var(--text-main);'; tdT.textContent=currency(total); tr.appendChild(tdT);
     const tdM = document.createElement('td'); tdM.className='pg-cell-monthly'; tdM.style.cssText='font-weight:700;color:var(--primary);'; if(monthly>0) tdM.textContent=currency(monthly); tr.appendChild(tdM);
     tr.appendChild(document.createElement('td')); tr.appendChild(document.createElement('td'));
@@ -1111,19 +1153,18 @@ export function createUnifiedGrid({
     const thead = document.createElement('thead');
     const headRow = document.createElement('tr');
     const cols = [
-      {t:'',     w:'28px'},   // drag
-      {t:'',     w:'36px'},   // checkbox
-      {t:'Type', w:'56px'},   // type badge
-      {t:'Name', w:''},       // name (editable)
-      {t:'No.',  w:'100px'},  // SKU / licence number
-      {t:'SLA',  w:'110px',pl:'16px'}, // sla (extra left gap)
-      {t:'Qty',  w:'66px'},
+      {t:'',          w:'28px'},   // drag
+      {t:'',          w:'36px'},   // checkbox
+      {t:'Type / No.',w:'120px'},  // type badge + sku
+      {t:'Name',      w:''},       // name (editable)
+      {t:'SLA',       w:'130px',pl:'14px'}, // wider + left gap
+      {t:'Qty',       w:'66px'},
       {t:'Unit Price',w:'105px'},
       {t:'Margin %',  w:'78px'},
       {t:'Total',     w:'110px',r:true},
       {t:'Monthly',   w:'100px',r:true},
-      {t:'Notes',     w:'120px'},
-      {t:'',          w:'88px'},
+      {t:'',          w:'36px'},   // notes button
+      {t:'',          w:'80px'},   // actions
     ];
     cols.forEach(c => {
       const th = document.createElement('th');
@@ -1145,7 +1186,7 @@ export function createUnifiedGrid({
           if (item._mergedIdx?.length > 1 && expandedMerges.has(item.id)) {
             item._mergedIdx.forEach(li => {
               const sub = document.createElement('tr'); sub.className='pg-merged-subrow';
-              sub.innerHTML=`<td></td><td></td><td></td><td colspan="10" style="padding-left:16px;">${_lineItems[li]?.name||''}</td>`;
+              sub.innerHTML=`<td></td><td></td><td></td><td colspan="9" style="padding-left:16px;color:var(--text-secondary);font-size:0.78rem;">${_lineItems[li]?.name||''}</td>`;
               tbody.appendChild(sub);
             });
           }
@@ -1159,7 +1200,7 @@ export function createUnifiedGrid({
     // Hidden rows
     hidden.forEach(item => {
       const tr = document.createElement('tr'); tr.className='hidden-row'; tr.dataset.id=item.id;
-      [null,null,null,dName(item),dSku(item),null,dQty(item),currency(dPrice(item)),dMargin(item).toFixed(1)+'%',currency(calcTotal(item)),null,null].forEach((v,i) => {
+      [null,null,dSku(item),dName(item),null,dQty(item),currency(dPrice(item)),dMargin(item).toFixed(1)+'%',currency(calcTotal(item)),null,null,null].forEach((v,i) => {
         const td = document.createElement('td'); if(v!=null) td.textContent=v; tr.appendChild(td);
       });
       const tdA = document.createElement('td');
