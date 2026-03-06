@@ -177,13 +177,11 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       const changes = diffLineItems(_savedSnapshot, lineItems);
       if (changes.length > 0) {
         try {
-          // Send as both 'changes' and 'objects' to handle either field name
-          // until the PocketBase collection field name is confirmed as 'changes'
-          const clBody = { quote: qId, changes, objects: changes };
+          const clBody = { quote: qId, changes };
           if (!isSuperUser() && currentUser?.id) clBody.changed_by = currentUser.id;
           await pb.collection('quote_changelog').create(clBody);
         } catch (err) {
-          console.warn('Changelog write failed:', err.message);
+          console.error('Changelog write failed:', err.message, err);
         }
       }
     }
@@ -559,9 +557,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       servicePacks,
       isTemplateMode,
       hourlyRate,
-      onSummaryChange: (summary) => {
-        if (summaryCardInstance) summaryCardInstance.update(summary);
-      },
+      onSummaryChange,   // defined above: updates summaryCard + triggerAutoSave
     });
     rightCol.appendChild(unifiedGridInstance.element);
 
