@@ -197,10 +197,13 @@ export function createUnifiedGrid({
         licenseId: lic.id, name: lic.name, sku: lic.sku,
         price: lic.initial_price, amount: lic._overrideQty || 1,
         margin: 25, sla: defaultSla, itemType: 'license',
+        // Persist originals in the JSON so they survive save/reload
+        _origName: lic.name, _origPrice: lic.initial_price,
+        _origQty: lic._overrideQty || 1, _origMargin: 25, _origSla: defaultSla,
       };
       const lineIdx = _lineItems.length;
       _lineItems.push(lineData);
-      _originals.push({ ...lineData }); // snapshot
+      _originals.push({ ...lineData, name: lineData._origName, price: lineData._origPrice, amount: lineData._origQty, margin: lineData._origMargin, sla: lineData._origSla });
 
     } else {
       const sp = catalogItem.item;
@@ -208,10 +211,12 @@ export function createUnifiedGrid({
         licenseId: sp.id, name: sp.package_name, sku: sp.id,
         price: (sp.estimated_hours || 0) * hourlyRate,
         amount: 1, margin: 25, sla: '', itemType: 'servicepack', hours: sp.estimated_hours || 0,
+        _origName: sp.package_name, _origPrice: (sp.estimated_hours || 0) * hourlyRate,
+        _origQty: 1, _origMargin: 25, _origSla: '',
       };
       const lineIdx = _lineItems.length;
       _lineItems.push(lineData);
-      _originals.push({ ...lineData });
+      _originals.push({ ...lineData, name: lineData._origName, price: lineData._origPrice, amount: lineData._origQty, margin: lineData._origMargin, sla: lineData._origSla });
     }
 
     // Find the last header group to assign to
@@ -230,7 +235,15 @@ export function createUnifiedGrid({
 
   function loadItems(lineItems = [], groups = []) {
     _lineItems = lineItems.map(l => ({ ...l }));
-    _originals = lineItems.map(l => ({ ...l })); // loaded values = originals
+    // Restore persisted originals if present; fall back to current values for old quotes
+    _originals = lineItems.map(l => ({
+      ...l,
+      name:   l._origName   ?? l.name,
+      price:  l._origPrice  ?? l.price,
+      amount: l._origQty    ?? l.amount,
+      margin: l._origMargin ?? l.margin,
+      sla:    l._origSla    ?? l.sla,
+    }));
     _items = [];
     groups.forEach((g, i) => {
       _items.push({ id: g.id || gid('h'), type: 'header', displayName: g.name || g.description || 'Group', hidden: false, order: i });
@@ -1215,14 +1228,14 @@ export function createUnifiedGrid({
     // Thead
     const thead = document.createElement('thead');
     const headRow = document.createElement('tr');
-    // Fixed layout: total must fit the right panel (~860px after catalog)
-    // Drag(22)+Check(30)+Type(88)+Name(160)+SLA(102)+Qty(50)+Price(86)+Margin(58)+Total(86)+Monthly(78)+Notes(28)+Actions(62) = 850px
+    // Fixed layout — th widths MUST match CSS class widths on td (.pg-col-drag=28px, .pg-cell-check=36px)
+    // 28+36+88+160+102+50+86+58+86+78+28+62 = 862px
     const cols = [
-      {t:'',          w:'22px'},   // drag
-      {t:'',          w:'30px'},   // checkbox
-      {t:'Type / No.',w:'88px'},   // type badge + sku
-      {t:'Name',      w:'160px'},  // name (editable)
-      {t:'SLA',       w:'102px',pl:'12px'},
+      {t:'',          w:'28px'},   // drag — matches .pg-col-drag { width:28px }
+      {t:'',          w:'36px'},   // check — matches .pg-cell-check { width:36px }
+      {t:'Type / No.',w:'88px'},
+      {t:'Name',      w:'160px'},
+      {t:'SLA',       w:'102px',pl:'14px'}, // matches tdSla padding-left:14px
       {t:'Qty',       w:'50px'},
       {t:'Unit Price',w:'86px'},
       {t:'Margin %',  w:'58px'},
