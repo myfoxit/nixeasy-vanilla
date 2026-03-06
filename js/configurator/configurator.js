@@ -857,6 +857,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     try {
       const spList = await pb.collection('service_packs').getFullList({ sort: 'package_name' });
       servicePacks = spList;
+      if (catalogPanelInstance) catalogPanelInstance.update({ servicePacks });
       updateSubComponents();
     } catch (err) {
       console.error('Failed to load service packs:', err);
