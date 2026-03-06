@@ -13,12 +13,10 @@ import { createPopover } from '../components/popover.js';
 import { currency } from '../utils/format.js';
 import { exportToJson, exportToCsv, exportToExcel } from '../utils/export.js';
 import { createCatalogPanel } from './catalog-panel.js';
-import { createQuoteLinesTable } from './quote-lines.js';
+import { createUnifiedGrid } from './unified-grid.js';
 import { createSummaryCard } from './summary-card.js';
 import { createContextBanner } from './context-banner.js';
 import { createInstalledBasePanel } from './installed-base-panel.js';
-import { createPresentationEditor } from './presentation-editor.js';
-import { createPresentationGrid, buildItemsFromSource } from './presentation-grid.js';
 import {
   MEASURE_POINT_LICENSE_CONFIGS,
   calculateLicenseDistribution
@@ -45,16 +43,10 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   const isTemplateMode = !!templateId;
 
   // ======================================================
-  // STATE (from useConfigurator.ts)
+  // STATE
   // ======================================================
-  let config = {
-    lineItems: [],
-    containers: [],
-    summary: { hk: 0, vk: 0, monthly: 0 }
-  };
   let qId = quoteId;
   let quoteName = '';
-  let wizardStep = 1; // 1=Items, 2=Presentation, 3=Export
   let templates = [];
   let templateName = '';
   let templateDesc = '';
@@ -62,22 +54,16 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   let opportunity = null;
   let customer = null;
   let servicePacks = [];
-  let containers = [];
-  let selectedContainerId = null;
   let installedBase = [];
   let installedBaseLoading = false;
-  let referencedInstalledBase = [];
   let showInstalledBase = false;
-  let presentationItems = null;   // Saved presentation layer (null = never edited)
-  let presentationVersion = 0;    // Incremented on presentation save
 
-  // Sub-component instances (populated in render)
+  // Sub-component instances
   let catalogPanelInstance = null;
-  let quoteLinesInstance = null;
+  let unifiedGridInstance = null;   // ← replaces quoteLinesInstance + presentationGrid
   let summaryCardInstance = null;
   let contextBannerInstance = null;
   let installedBasePanelInstance = null;
-  let presentationEditorInstance = null;
 
   // Popover instances for cleanup
   let exportPopoverInstance = null;
@@ -85,241 +71,23 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   let savePopoverInstance = null;
 
   // ======================================================
-  // HELPER: serialize containers for saving
+  // HELPERS — delegate to unifiedGridInstance
   // ======================================================
-  function serializeContainers() {
-    return containers.map(c => ({
-      id: c.id,
-      name: c.name,
-      description: c.description,
-      createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : c.createdAt
-    }));
-  }
 
-  // ======================================================
-  // SUMMARY RECALCULATION
-  // ======================================================
-  function recalcSummary() {
-    const lineItems = config.lineItems || [];
-    let hk = 0, vk = 0, monthly = 0;
-
-    lineItems.forEach(item => {
-      if (item.itemType === 'servicepack') {
-        const lineHk = (item.hours || 0) * hourlyRate * item.amount;
-        hk += lineHk;
-        vk += lineHk * (1 + item.margin / 100);
-      } else {
-        const lic = licenses.find(l => l.id === item.licenseId);
-        const sla = lic?.expand?.possible_SLAs?.find(s => s.id === item.sla);
-        const lineHk = item.price * item.amount;
-        const lineVk = lineHk * (1 + item.margin / 100);
-        hk += lineHk;
-        vk += lineVk;
-        monthly += sla ? lineVk * (sla.monthly_percentage / 100) : 0;
-      }
-    });
-
-    config.summary = { hk, vk, monthly };
-  }
-
-  // ======================================================
-  // CONTAINER MANAGEMENT
-  // ======================================================
-  function addContainer(name, description) {
-    const newContainer = {
-      id: crypto.randomUUID(),
-      name,
-      description,
-      createdAt: new Date()
-    };
-    containers = [...containers, newContainer];
-    selectedContainerId = newContainer.id;
-    updateSubComponents();
-    return newContainer;
-  }
-
-  function updateContainer(id, name, description) {
-    containers = containers.map(c =>
-      c.id === id ? { ...c, name, description } : c
-    );
-    updateSubComponents();
-  }
-
-  function removeContainer(id) {
-    config.lineItems = config.lineItems.filter(item => item.containerId !== id);
-    const remaining = containers.filter(c => c.id !== id);
-    if (selectedContainerId === id) {
-      selectedContainerId = remaining.length > 0 ? remaining[remaining.length - 1].id : null;
-    }
-    containers = remaining;
-    recalcSummary();
-    updateSubComponents();
-  }
-
-  function selectContainer(id) {
-    selectedContainerId = id;
-    updateSubComponents();
-  }
-
-  // ======================================================
-  // LINE ITEM MANAGEMENT
-  // ======================================================
   function addItem(catalogItem) {
-    if (!selectedContainerId) {
-      showToast('Please select a group first', 'warning');
-      return;
-    }
-
-    if (catalogItem.type === 'license') {
-      const lic = catalogItem.item;
-      const possibleSLAs = lic.expand?.possible_SLAs || [];
-      const defaultSla = possibleSLAs.find(s => s.name.toLowerCase().includes('essential'))?.id
-        || possibleSLAs[0]?.id
-        || '';
-
-      const existingIndex = config.lineItems.findIndex(
-        i => i.licenseId === lic.id && i.itemType !== 'servicepack' && i.containerId === selectedContainerId
-      );
-
-      if (existingIndex >= 0) {
-        config.lineItems[existingIndex] = {
-          ...config.lineItems[existingIndex],
-          amount: config.lineItems[existingIndex].amount + 1
-        };
-      } else {
-        config.lineItems = [...config.lineItems, {
-          licenseId: lic.id,
-          name: lic.name,
-          sku: lic.sku,
-          price: lic.initial_price,
-          amount: 1,
-          margin: DEFAULT_MARGIN,
-          sla: defaultSla,
-          itemType: 'license',
-          containerId: selectedContainerId
-        }];
-      }
-    } else {
-      const sp = catalogItem.item;
-      config.lineItems = [...config.lineItems, {
-        licenseId: sp.id,
-        name: sp.package_name,
-        sku: sp.id,
-        price: sp.estimated_hours * hourlyRate,
-        amount: 1,
-        margin: DEFAULT_MARGIN,
-        sla: '',
-        hours: sp.estimated_hours,
-        itemType: 'servicepack',
-        containerId: selectedContainerId
-      }];
-    }
-
-    recalcSummary();
-    updateSubComponents();
+    if (unifiedGridInstance) unifiedGridInstance.addItem(catalogItem);
   }
 
-  function updateItem(idx, field, val) {
-    const newItems = [...config.lineItems];
-    if (idx >= 0 && idx < newItems.length) {
-      newItems[idx] = { ...newItems[idx], [field]: val };
-      if (field === 'hours' && newItems[idx].itemType === 'servicepack') {
-        newItems[idx].price = (val || 0) * hourlyRate;
-      }
-    }
-    config.lineItems = newItems;
-    recalcSummary();
-    updateSubComponents();
+  function addMeasurePointLicenses(distribution) {
+    if (!unifiedGridInstance) return;
+    distribution.forEach(d => {
+      const lic = d.license || licenses.find(l => l.id === d.licenseId);
+      if (lic) unifiedGridInstance.addItem({ type: 'license', item: { ...lic, _overrideQty: d.quantity } });
+    });
   }
 
-  function removeItem(idx) {
-    const ni = [...config.lineItems];
-    ni.splice(idx, 1);
-    config.lineItems = ni;
-    recalcSummary();
-    updateSubComponents();
-  }
-
-  function addMeasurePointLicenses(distribution, containerId) {
-    const targetContainerId = containerId || selectedContainerId;
-    if (!targetContainerId) {
-      showToast('Please select a group first', 'warning');
-      return;
-    }
-
-    const newItems = [];
-
-    for (const d of distribution) {
-      if ('license' in d && d.license) {
-        const possibleSLAs = d.license.expand?.possible_SLAs || [];
-        const defaultSla = possibleSLAs.find(s => s.name.toLowerCase().includes('essential'))?.id
-          || possibleSLAs[0]?.id
-          || '';
-
-        newItems.push({
-          licenseId: d.license.id,
-          name: d.license.name,
-          sku: d.license.sku,
-          price: d.license.initial_price,
-          amount: d.quantity,
-          margin: DEFAULT_MARGIN,
-          sla: defaultSla,
-          itemType: 'license',
-          containerId: targetContainerId
-        });
-      } else if ('licenseId' in d && d.licenseId) {
-        const license = licenses.find(l => l.id === d.licenseId);
-        if (license) {
-          const possibleSLAs = license.expand?.possible_SLAs || [];
-          const defaultSla = possibleSLAs.find(s => s.name.toLowerCase().includes('essential'))?.id
-            || possibleSLAs[0]?.id
-            || '';
-
-          newItems.push({
-            licenseId: license.id,
-            name: license.name,
-            sku: license.sku,
-            price: license.initial_price,
-            amount: d.quantity,
-            margin: DEFAULT_MARGIN,
-            sla: defaultSla,
-            itemType: 'license',
-            containerId: targetContainerId
-          });
-        }
-      }
-    }
-
-    config.lineItems = [...config.lineItems, ...newItems];
-    recalcSummary();
-    updateSubComponents();
-  }
-
-  // ======================================================
-  // INSTALLED BASE
-  // ======================================================
-  function toggleInstalledBaseReference(item) {
-    const exists = referencedInstalledBase.some(i => i.id === item.id);
-    if (exists) {
-      referencedInstalledBase = referencedInstalledBase.filter(i => i.id !== item.id);
-    } else {
-      referencedInstalledBase = [...referencedInstalledBase, item];
-    }
-    updateSubComponents();
-  }
-
-  function toggleSiteReference(siteItems) {
-    const siteItemIds = new Set(siteItems.map(i => i.id));
-    const allSelected = siteItems.every(item => referencedInstalledBase.some(i => i.id === item.id));
-
-    if (allSelected) {
-      referencedInstalledBase = referencedInstalledBase.filter(i => !siteItemIds.has(i.id));
-    } else {
-      const existingIds = new Set(referencedInstalledBase.map(i => i.id));
-      const newItems = siteItems.filter(item => !existingIds.has(item.id));
-      referencedInstalledBase = [...referencedInstalledBase, ...newItems];
-    }
-    updateSubComponents();
+  function onSummaryChange(summary) {
+    if (summaryCardInstance) summaryCardInstance.update(summary);
   }
 
   // ======================================================
@@ -327,12 +95,10 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   // ======================================================
   async function save() {
     if (!oppId) return;
-    const configToSave = {
-      ...config,
-      containers: serializeContainers(),
-      presentationItems: presentationItems || null,
-      presentationVersion
-    };
+    const lineItems = unifiedGridInstance ? unifiedGridInstance.getLineItems() : [];
+    const groups    = unifiedGridInstance ? unifiedGridInstance.getGroups()    : [];
+    const summary   = unifiedGridInstance ? unifiedGridInstance.getSummary()   : { hk: 0, vk: 0, monthly: 0 };
+    const configToSave = { lineItems, groups, summary };
     const body = { opportunity: oppId, quote_data: configToSave };
     if (!isSuperUser() && currentUser?.id) body.created_by = currentUser.id;
 
@@ -359,52 +125,22 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       showToast('Please enter a template name', 'warning');
       return false;
     }
-    const configToSave = {
-      ...config,
-      containers: serializeContainers(),
-      presentationItems: presentationItems || null,
-      presentationVersion
-    };
+    const lineItems = unifiedGridInstance ? unifiedGridInstance.getLineItems() : [];
+    const groups    = unifiedGridInstance ? unifiedGridInstance.getGroups()    : [];
     const res = await pb.collection('quote_templates').create({
-      name,
-      description: desc,
-      template_data: configToSave
+      name, description: desc,
+      template_data: { lineItems, groups }
     });
     templates = [res, ...templates];
     return true;
   }
 
   function loadFromTemplate(template) {
-    if (template.template_data) {
-      const items = template.template_data.lineItems;
-      const templateContainers = template.template_data.containers || [];
-      const loadedContainers = templateContainers.map(c => ({
-        id: c.id,
-        name: c.name,
-        description: c.description,
-        createdAt: new Date(c.createdAt)
-      }));
-
-      config = {
-        lineItems: Array.isArray(items) ? items.map(item => ({ ...item })) : [],
-        containers: templateContainers,
-        summary: { hk: 0, vk: 0, monthly: 0 }
-      };
-      containers = loadedContainers;
-      selectedContainerId = loadedContainers.length > 0 ? loadedContainers[0].id : null;
-
-      // Restore presentation state from template
-      if (template.template_data.presentationItems) {
-        presentationItems = template.template_data.presentationItems;
-        presentationVersion = template.template_data.presentationVersion || 0;
-      } else {
-        presentationItems = null;
-        presentationVersion = 0;
-      }
-
-      recalcSummary();
-      updateSubComponents();
-    }
+    if (!template.template_data || !unifiedGridInstance) return;
+    const items  = Array.isArray(template.template_data.lineItems) ? template.template_data.lineItems : [];
+    // support both old "containers" format and new "groups"
+    const groups = template.template_data.groups || template.template_data.containers || [];
+    unifiedGridInstance.loadItems(items, groups);
   }
 
   async function saveTemplate() {
@@ -412,13 +148,9 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       showToast('Please enter a template name', 'warning');
       return;
     }
-    const configToSave = {
-      ...config,
-      containers: serializeContainers(),
-      presentationItems: presentationItems || null,
-      presentationVersion
-    };
-    const body = { name: templateName, description: templateDesc, template_data: configToSave };
+    const lineItems = unifiedGridInstance ? unifiedGridInstance.getLineItems() : [];
+    const groups    = unifiedGridInstance ? unifiedGridInstance.getGroups()    : [];
+    const body = { name: templateName, description: templateDesc, template_data: { lineItems, groups } };
     if (editingTemplateId && editingTemplateId !== 'new') {
       await pb.collection('quote_templates').update(editingTemplateId, body);
     } else {
@@ -428,10 +160,9 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   }
 
   async function handleExport(format) {
-    const configToExport = {
-      ...config,
-      containers: serializeContainers()
-    };
+    const lineItems = unifiedGridInstance ? unifiedGridInstance.getLineItems() : [];
+    const groups    = unifiedGridInstance ? unifiedGridInstance.getGroups()    : [];
+    const configToExport = { lineItems, containers: groups, summary: unifiedGridInstance?.getSummary() || {} };
     const filename = isTemplateMode
       ? `template_${templateName || 'export'}`
       : `quote_${qId || 'new'}`;
@@ -441,90 +172,17 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     else await exportToExcel(configToExport, licenses, filename);
   }
 
-  // Dependency add handler
-  function handleAddDependency(license) {
-    if (!selectedContainerId) {
-      showToast('Please select a group first', 'warning');
-      return;
-    }
-    addItem({ type: 'license', item: license });
-    showToast(`Added dependency: ${license.name}`, 'info');
-  }
-
   // ======================================================
-  // PRESENTATION EDITOR
-  // ======================================================
-  function openPresentationEditor() {
-    if (config.lineItems.length === 0) {
-      showToast('Add items to the quote before exporting', 'warning');
-      return;
-    }
-
-    presentationEditorInstance = createPresentationEditor({
-      config,
-      licenses,
-      presentationItems,
-      presentationVersion,
-      isTemplateMode,
-      templateName,
-      quoteId: qId,
-      onClose: (items) => {
-        presentationItems = items;
-        presentationVersion++;
-        presentationEditorInstance = null;
-      },
-      onExport: (format, items) => {
-        presentationItems = items;
-        presentationVersion++;
-      }
-    });
-
-    document.body.appendChild(presentationEditorInstance.element);
-  }
-
-  // ======================================================
-  // SUB-COMPONENT UPDATE (called after every state change)
+  // SUB-COMPONENT UPDATE (context banner + installed base)
   // ======================================================
   function updateSubComponents() {
-    if (catalogPanelInstance) {
-      catalogPanelInstance.update({
-        licenses,
-        servicePacks,
-        hourlyRate,
-        selectedContainerId,
-        containers,
-        onAddItem: addItem,
-        onAddMeasurePointLicenses: addMeasurePointLicenses,
-        onSelectContainer: selectContainer
-      });
-    }
-    if (quoteLinesInstance) {
-      quoteLinesInstance.update({
-        lineItems: config.lineItems,
-        licenses,
-        isTemplateMode,
-        onUpdateItem: updateItem,
-        onRemoveItem: removeItem,
-        onAddDependency: handleAddDependency,
-        referencedInstalledBase,
-        onRemoveInstalledBaseReference: toggleInstalledBaseReference
-      });
-    }
-    if (summaryCardInstance) {
-      summaryCardInstance.update(config.summary);
-    }
     if (contextBannerInstance) {
       contextBannerInstance.update({
-        opportunity,
-        customer,
-        installedBase,
-        showInstalledBase,
+        opportunity, customer, installedBase, showInstalledBase,
         onToggleInstalledBase: () => {
           showInstalledBase = !showInstalledBase;
           renderInstalledBaseSection();
-          if (contextBannerInstance) {
-            contextBannerInstance.update({ showInstalledBase });
-          }
+          if (contextBannerInstance) contextBannerInstance.update({ showInstalledBase });
         }
       });
     }
@@ -533,9 +191,9 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
         installedBase,
         isLoading: installedBaseLoading,
         customerName: customer?.name,
-        referencedItems: referencedInstalledBase,
-        onToggleItem: toggleInstalledBaseReference,
-        onToggleSite: toggleSiteReference
+        referencedItems: [],
+        onToggleItem: () => {},
+        onToggleSite: () => {},
       });
     }
   }
@@ -558,9 +216,9 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
         installedBase,
         isLoading: installedBaseLoading,
         customerName: customer?.name,
-        referencedItems: referencedInstalledBase,
-        onToggleItem: toggleInstalledBaseReference,
-        onToggleSite: toggleSiteReference
+        referencedItems: [],
+        onToggleItem: () => {},
+        onToggleSite: () => {},
       });
       installedBaseSectionEl.appendChild(installedBasePanelInstance.element);
     } else {
@@ -593,8 +251,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     backBtn.innerHTML = '&larr;';
     backBtn.title = 'Back';
     backBtn.addEventListener('click', () => {
-      if (wizardStep > 1) { wizardStep--; renderWizardContent(); updateStepBar(); }
-      else if (typeof onBack === 'function') onBack();
+      if (typeof onBack === 'function') onBack();
     });
     headerLeft.appendChild(backBtn);
 
@@ -686,6 +343,13 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
         headerRight.appendChild(dupBtn);
       }
 
+      // Export
+      const exportTrigger = document.createElement('button');
+      exportTrigger.className = 'btn btn-secondary btn-sm';
+      exportTrigger.textContent = 'Export';
+      exportPopoverInstance = createPopover({ trigger: exportTrigger, content: () => buildExportContent(), align: 'right', width: 280 });
+      headerRight.appendChild(exportPopoverInstance.element);
+
       // Save
       const saveBtn = document.createElement('button');
       saveBtn.className = 'btn btn-primary btn-sm';
@@ -707,260 +371,103 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     headerTop.appendChild(headerRight);
     header.appendChild(headerTop);
 
-    // Wizard step bar (non-template mode)
-    if (!isTemplateMode) {
-      const stepBar = document.createElement('div');
-      stepBar.className = 'wizard-steps';
-      const steps = [
-        { num: 1, label: 'Add Items', icon: '📦' },
-        { num: 2, label: 'Presentation', icon: '🎨' },
-        { num: 3, label: 'Export', icon: '📤' },
-      ];
-      steps.forEach((s, i) => {
-        if (i > 0) {
-          const connector = document.createElement('div');
-          connector.className = 'wizard-connector' + (wizardStep > s.num - 1 ? ' active' : '');
-          stepBar.appendChild(connector);
-        }
-        const stepEl = document.createElement('button');
-        stepEl.className = 'wizard-step' + (wizardStep === s.num ? ' active' : '') + (wizardStep > s.num ? ' done' : '');
-        stepEl.innerHTML = `<span class="wizard-step-num">${wizardStep > s.num ? '✓' : s.num}</span><span class="wizard-step-label">${s.label}</span>`;
-        stepEl.addEventListener('click', () => {
-          wizardStep = s.num;
-          renderWizardContent();
-          updateStepBar();
-        });
-        stepBar.appendChild(stepEl);
-      });
-      header.appendChild(stepBar);
-
-      // Keep reference for updates
-      header._stepBar = stepBar;
-    }
-
     container.appendChild(header);
-
-    function updateStepBar() {
-      const bar = header._stepBar;
-      if (!bar) return;
-      const stepEls = bar.querySelectorAll('.wizard-step');
-      const connectors = bar.querySelectorAll('.wizard-connector');
-      stepEls.forEach((el, i) => {
-        const num = i + 1;
-        el.className = 'wizard-step' + (wizardStep === num ? ' active' : '') + (wizardStep > num ? ' done' : '');
-        el.querySelector('.wizard-step-num').textContent = wizardStep > num ? '✓' : num;
-      });
-      connectors.forEach((c, i) => {
-        c.className = 'wizard-connector' + (wizardStep > i + 1 ? ' active' : '');
-      });
-    }
 
     // =============================================
     // CONTEXT BANNER (quote mode only)
     // =============================================
     if (!isTemplateMode) {
       contextBannerInstance = createContextBanner({
-        opportunity,
-        customer,
-        installedBase,
-        showInstalledBase,
+        opportunity, customer, installedBase, showInstalledBase,
         onToggleInstalledBase: () => {
           showInstalledBase = !showInstalledBase;
           renderInstalledBaseSection();
-          if (contextBannerInstance) {
-            contextBannerInstance.update({ showInstalledBase });
-          }
+          if (contextBannerInstance) contextBannerInstance.update({ showInstalledBase });
         }
       });
       container.appendChild(contextBannerInstance.element);
     }
 
     // =============================================
-    // WIZARD CONTENT CONTAINER
+    // INSTALLED BASE COLLAPSIBLE SECTION
     // =============================================
-    const wizardContent = document.createElement('div');
-    wizardContent.className = 'wizard-content';
-    container.appendChild(wizardContent);
+    installedBaseSectionEl = document.createElement('div');
+    container.appendChild(installedBaseSectionEl);
+    renderInstalledBaseSection();
 
     // =============================================
-    // RENDER WIZARD CONTENT (switches by step)
+    // TEMPLATE INPUTS (template mode only)
     // =============================================
-    function renderWizardContent() {
-      wizardContent.innerHTML = '';
-      // Clean up sub-component instances
-      catalogPanelInstance = null;
-      quoteLinesInstance = null;
-      summaryCardInstance = null;
-
-      if (isTemplateMode || wizardStep === 1) {
-        renderStep1_Items(wizardContent);
-      } else if (wizardStep === 2) {
-        renderStep2_Presentation(wizardContent);
-      } else if (wizardStep === 3) {
-        renderStep3_Export(wizardContent);
-      }
+    if (isTemplateMode) {
+      const tplSection = document.createElement('div');
+      tplSection.className = 'p-6 pb-0';
+      const tplCard = document.createElement('div');
+      tplCard.className = 'card p-4 mb-0 grid grid-cols-2 gap-4';
+      const nameGroup = document.createElement('div');
+      const nameLabel = document.createElement('label');
+      nameLabel.className = 'text-sm text-secondary mb-1 block';
+      nameLabel.textContent = 'Template Name';
+      nameGroup.appendChild(nameLabel);
+      const nameInp = document.createElement('input');
+      nameInp.value = templateName;
+      nameInp.addEventListener('input', e => { templateName = e.target.value; });
+      nameGroup.appendChild(nameInp);
+      tplCard.appendChild(nameGroup);
+      const descGroup = document.createElement('div');
+      const descLabel = document.createElement('label');
+      descLabel.className = 'text-sm text-secondary mb-1 block';
+      descLabel.textContent = 'Description';
+      descGroup.appendChild(descLabel);
+      const descInp = document.createElement('input');
+      descInp.value = templateDesc;
+      descInp.addEventListener('input', e => { templateDesc = e.target.value; });
+      descGroup.appendChild(descInp);
+      tplCard.appendChild(descGroup);
+      tplSection.appendChild(tplCard);
+      container.appendChild(tplSection);
     }
 
-    // --- STEP 1: Add Items ---
-    function renderStep1_Items(target) {
-      // Installed base
-      installedBaseSectionEl = document.createElement('div');
-      target.appendChild(installedBaseSectionEl);
-      renderInstalledBaseSection();
+    // =============================================
+    // MAIN GRID: Catalog (left) + Unified grid (right)
+    // =============================================
+    const mainWrap = document.createElement('div');
+    mainWrap.className = 'p-6';
 
-      // Template inputs
-      if (isTemplateMode) {
-        const tplInputSection = document.createElement('div');
-        tplInputSection.className = 'p-6 pb-0';
-        const tplCard = document.createElement('div');
-        tplCard.className = 'card p-4 mb-0 grid grid-cols-2 gap-4';
+    const gridRow = document.createElement('div');
+    gridRow.className = 'grid grid-cols-12 gap-6';
+    gridRow.style.alignItems = 'start';
 
-        const nameGroup = document.createElement('div');
-        const nameLabel = document.createElement('label');
-        nameLabel.className = 'text-sm text-secondary mb-1 block';
-        nameLabel.textContent = 'Template Name';
-        nameGroup.appendChild(nameLabel);
-        const nameInp = document.createElement('input');
-        nameInp.value = templateName;
-        nameInp.addEventListener('input', e => { templateName = e.target.value; });
-        nameGroup.appendChild(nameInp);
-        tplCard.appendChild(nameGroup);
+    // Left: catalog panel (col-span-4)
+    catalogPanelInstance = createCatalogPanel({
+      licenses, servicePacks, hourlyRate,
+      selectedContainerId: null, containers: [],
+      onAddItem: addItem,
+      onAddMeasurePointLicenses: addMeasurePointLicenses,
+      onSelectContainer: () => {},
+    });
+    gridRow.appendChild(catalogPanelInstance.element);
 
-        const descGroup = document.createElement('div');
-        const descLabel = document.createElement('label');
-        descLabel.className = 'text-sm text-secondary mb-1 block';
-        descLabel.textContent = 'Description';
-        descGroup.appendChild(descLabel);
-        const descInp = document.createElement('input');
-        descInp.value = templateDesc;
-        descInp.addEventListener('input', e => { templateDesc = e.target.value; });
-        descGroup.appendChild(descInp);
-        tplCard.appendChild(descGroup);
+    // Right: unified grid + summary card (col-span-8)
+    const rightCol = document.createElement('div');
+    rightCol.className = 'col-span-8 flex flex-col gap-6';
 
-        tplInputSection.appendChild(tplCard);
-        target.appendChild(tplInputSection);
-      }
+    unifiedGridInstance = createUnifiedGrid({
+      licenses,
+      servicePacks,
+      isTemplateMode,
+      hourlyRate,
+      onSummaryChange: (summary) => {
+        if (summaryCardInstance) summaryCardInstance.update(summary);
+      },
+    });
+    rightCol.appendChild(unifiedGridInstance.element);
 
-      // Catalog + Quote Lines grid
-      const gridWrapper = document.createElement('div');
-      gridWrapper.className = 'p-6 h-full';
-      const grid = document.createElement('div');
-      grid.className = 'grid grid-cols-12 gap-6 h-full';
-      grid.style.alignItems = 'start';
+    summaryCardInstance = createSummaryCard({ hk: 0, vk: 0, monthly: 0 });
+    rightCol.appendChild(summaryCardInstance.element);
 
-      catalogPanelInstance = createCatalogPanel({
-        licenses, servicePacks, hourlyRate, selectedContainerId, containers,
-        onAddItem: addItem, onAddMeasurePointLicenses: addMeasurePointLicenses, onSelectContainer: selectContainer
-      });
-      grid.appendChild(catalogPanelInstance.element);
-
-      const rightCol = document.createElement('div');
-      rightCol.className = 'col-span-8 flex flex-col gap-6';
-
-      quoteLinesInstance = createQuoteLinesTable({
-        lineItems: config.lineItems, licenses, isTemplateMode,
-        onUpdateItem: updateItem, onRemoveItem: removeItem,
-        onAddDependency: handleAddDependency, referencedInstalledBase,
-        onRemoveInstalledBaseReference: toggleInstalledBaseReference
-      });
-      rightCol.appendChild(quoteLinesInstance.element);
-
-      summaryCardInstance = createSummaryCard(config.summary);
-      rightCol.appendChild(summaryCardInstance.element);
-
-      grid.appendChild(rightCol);
-      gridWrapper.appendChild(grid);
-      target.appendChild(gridWrapper);
-
-      // Next step button
-      if (!isTemplateMode) {
-        const nextBar = document.createElement('div');
-        nextBar.style.cssText = 'display:flex;justify-content:flex-end;padding:0 1.5rem 1.5rem;';
-        const nextBtn = document.createElement('button');
-        nextBtn.className = 'btn btn-primary';
-        nextBtn.textContent = 'Next: Presentation →';
-        nextBtn.addEventListener('click', () => {
-          if (config.lineItems.length === 0) { showToast('Add items first', 'warning'); return; }
-          wizardStep = 2; renderWizardContent(); updateStepBar();
-        });
-        nextBar.appendChild(nextBtn);
-        target.appendChild(nextBar);
-      }
-    }
-
-    // --- STEP 2: Presentation ---
-    function renderStep2_Presentation(target) {
-      const wrap = document.createElement('div');
-      wrap.style.cssText = 'padding:1.5rem;';
-
-      // Auto-build presentation items if not yet created
-      if (!presentationItems) {
-        presentationItems = buildItemsFromSource(config.lineItems);
-        presentationVersion++;
-      }
-
-      // Inline presentation grid
-      const gridEl = createPresentationGrid({
-        items: presentationItems,
-        lineItems: config.lineItems,
-        licenses,
-        onChange: (items) => {
-          presentationItems = items;
-          presentationVersion++;
-        }
-      });
-      wrap.appendChild(gridEl.element);
-      target.appendChild(wrap);
-
-      // Nav buttons
-      const navBar = document.createElement('div');
-      navBar.style.cssText = 'display:flex;justify-content:space-between;padding:0 1.5rem 1.5rem;';
-      const prevBtn = document.createElement('button');
-      prevBtn.className = 'btn btn-secondary';
-      prevBtn.textContent = '← Back to Items';
-      prevBtn.addEventListener('click', () => { wizardStep = 1; renderWizardContent(); updateStepBar(); });
-      const nextBtn = document.createElement('button');
-      nextBtn.className = 'btn btn-primary';
-      nextBtn.textContent = 'Next: Export →';
-      nextBtn.addEventListener('click', () => { wizardStep = 3; renderWizardContent(); updateStepBar(); });
-      navBar.appendChild(prevBtn);
-      navBar.appendChild(nextBtn);
-      target.appendChild(navBar);
-    }
-
-    // --- STEP 3: Export ---
-    function renderStep3_Export(target) {
-      const wrap = document.createElement('div');
-      wrap.style.cssText = 'padding:2rem 1.5rem;max-width:600px;margin:0 auto;';
-
-      const heading = document.createElement('h3');
-      heading.style.cssText = 'font-size:1.1rem;margin-bottom:1.5rem;';
-      heading.textContent = 'Export Quote';
-      wrap.appendChild(heading);
-
-      // Summary
-      const summaryEl = createSummaryCard(config.summary);
-      summaryEl.element.style.marginBottom = '1.5rem';
-      wrap.appendChild(summaryEl.element);
-
-      // Export format buttons
-      const exportEl = buildExportContent();
-      exportEl.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px;';
-      wrap.appendChild(exportEl);
-
-      // Nav back
-      const navBar = document.createElement('div');
-      navBar.style.cssText = 'display:flex;justify-content:flex-start;padding-top:1.5rem;';
-      const prevBtn = document.createElement('button');
-      prevBtn.className = 'btn btn-secondary';
-      prevBtn.textContent = '← Back to Presentation';
-      prevBtn.addEventListener('click', () => { wizardStep = 2; renderWizardContent(); updateStepBar(); });
-      navBar.appendChild(prevBtn);
-      wrap.appendChild(navBar);
-      target.appendChild(wrap);
-    }
-
-    renderWizardContent();
+    gridRow.appendChild(rightCol);
+    mainWrap.appendChild(gridRow);
+    container.appendChild(mainWrap);
   }
 
   // ======================================================
@@ -1251,30 +758,11 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       try {
         const q = await pb.collection('quotes').getOne(quoteId);
         quoteName = q.name || '';
-        if (q.quote_data) {
+        if (q.quote_data && unifiedGridInstance) {
           const data = q.quote_data;
-          const loadedContainers = (data.containers || []).map(c => ({
-            id: c.id,
-            name: c.name,
-            description: c.description,
-            createdAt: new Date(c.createdAt)
-          }));
-          config = {
-            lineItems: Array.isArray(data.lineItems) ? data.lineItems : [],
-            containers: data.containers || [],
-            summary: data.summary || { hk: 0, vk: 0, monthly: 0 }
-          };
-          containers = loadedContainers;
-          if (loadedContainers.length > 0) {
-            selectedContainerId = loadedContainers[0].id;
-          }
-          // Restore presentation state
-          if (data.presentationItems) {
-            presentationItems = data.presentationItems;
-            presentationVersion = data.presentationVersion || 0;
-          }
-          recalcSummary();
-          updateSubComponents();
+          const items  = Array.isArray(data.lineItems) ? data.lineItems : [];
+          const groups = data.groups || data.containers || [];
+          unifiedGridInstance.loadItems(items, groups);
         }
       } catch (err) {
         console.error('Failed to load quote:', err);
@@ -1285,29 +773,11 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     if (templateId && templateId !== 'new') {
       try {
         const t = await pb.collection('quote_templates').getOne(templateId);
-        if (t.template_data) {
+        if (t.template_data && unifiedGridInstance) {
           const data = t.template_data;
-          const loadedContainers = (data.containers || []).map(c => ({
-            id: c.id,
-            name: c.name,
-            description: c.description,
-            createdAt: new Date(c.createdAt)
-          }));
-          config = {
-            lineItems: Array.isArray(data.lineItems) ? data.lineItems : [],
-            containers: data.containers || [],
-            summary: data.summary || { hk: 0, vk: 0, monthly: 0 }
-          };
-          containers = loadedContainers;
-          if (loadedContainers.length > 0) {
-            selectedContainerId = loadedContainers[0].id;
-          }
-          // Restore presentation state
-          if (data.presentationItems) {
-            presentationItems = data.presentationItems;
-            presentationVersion = data.presentationVersion || 0;
-          }
-          recalcSummary();
+          const items  = Array.isArray(data.lineItems) ? data.lineItems : [];
+          const groups = data.groups || data.containers || [];
+          unifiedGridInstance.loadItems(items, groups);
         }
         templateName = t.name || '';
         templateDesc = t.description || '';
@@ -1380,12 +850,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   // INIT
   // ======================================================
   renderFull();
-  loadInitialData().then(() => {
-    // Auto-create a default container if none exist (new quote)
-    if (containers.length === 0) {
-      addContainer('Default', '');
-    }
-  });
+  loadInitialData();
 
   // ======================================================
   // CLEANUP
@@ -1394,7 +859,6 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     if (exportPopoverInstance) exportPopoverInstance.destroy();
     if (loadPopoverInstance) loadPopoverInstance.destroy();
     if (savePopoverInstance) savePopoverInstance.destroy();
-    if (presentationEditorInstance) presentationEditorInstance.destroy();
     container.innerHTML = '';
   }
 
