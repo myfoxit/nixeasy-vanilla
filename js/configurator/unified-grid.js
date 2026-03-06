@@ -1249,6 +1249,111 @@ export function createUnifiedGrid({
       return;
     }
 
+    // ── Overwrite-all toolbar ─────────────────────────────────────
+    const toolbar = document.createElement('div');
+    toolbar.style.cssText =
+      'display:flex;align-items:center;gap:8px;padding:6px 4px 8px;flex-wrap:wrap;';
+
+    // Collect all SLAs across all license items currently in the grid
+    const allSlas = [];
+    const seenSla = new Set();
+    _lineItems.forEach(line => {
+      const lic = licenses.find(l => l.id === line.licenseId);
+      (lic?.expand?.possible_SLAs || []).forEach(s => {
+        if (!seenSla.has(s.id)) { seenSla.add(s.id); allSlas.push(s); }
+      });
+    });
+
+    // "Set All SLA" button + dropdown
+    if (allSlas.length) {
+      const slaWrap = document.createElement('div');
+      slaWrap.style.cssText = 'position:relative;';
+
+      const slaBtn = document.createElement('button');
+      slaBtn.style.cssText =
+        'font-size:0.72rem;padding:3px 10px;border-radius:5px;border:1px solid var(--border);' +
+        'background:var(--surface);color:var(--text-main);cursor:pointer;display:flex;align-items:center;gap:5px;';
+      slaBtn.innerHTML =
+        '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:13px;height:13px;flex-shrink:0;">' +
+        '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>' +
+        'Set All SLA <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:11px;height:11px;">' +
+        '<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>';
+
+      const slaMenu = document.createElement('div');
+      slaMenu.style.cssText =
+        'position:absolute;top:calc(100% + 4px);left:0;min-width:200px;background:var(--surface);' +
+        'border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:120;display:none;';
+
+      [{ id: '', name: 'None' }, ...allSlas].forEach(s => {
+        const opt = document.createElement('button');
+        opt.style.cssText =
+          'display:block;width:100%;text-align:left;padding:7px 12px;font-size:0.78rem;' +
+          'border:none;background:transparent;cursor:pointer;color:var(--text-main);';
+        opt.textContent = s.name;
+        opt.addEventListener('mouseenter', () => { opt.style.background = 'var(--primary-light)'; });
+        opt.addEventListener('mouseleave', () => { opt.style.background = 'transparent'; });
+        opt.addEventListener('click', () => {
+          _lineItems.forEach(line => { if (line.itemType !== 'servicepack') line.sla = s.id; });
+          slaMenu.style.display = 'none';
+          emitSummary(); render();
+          showToast(`SLA set to "${s.name}" for all items`, 'success');
+        });
+        slaMenu.appendChild(opt);
+      });
+
+      slaBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        const open = slaMenu.style.display === 'block';
+        slaMenu.style.display = open ? 'none' : 'block';
+        if (!open) setTimeout(() => {
+          const dismiss = () => { slaMenu.style.display = 'none'; document.removeEventListener('click', dismiss, true); };
+          document.addEventListener('click', dismiss, true);
+        }, 0);
+      });
+
+      slaWrap.appendChild(slaBtn);
+      slaWrap.appendChild(slaMenu);
+      toolbar.appendChild(slaWrap);
+    }
+
+    // "Set All Margin %" inline input
+    const marginWrap = document.createElement('div');
+    marginWrap.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+    const marginLabel = document.createElement('span');
+    marginLabel.style.cssText = 'font-size:0.72rem;color:var(--text-secondary);white-space:nowrap;';
+    marginLabel.textContent = 'Set All Margin:';
+    marginWrap.appendChild(marginLabel);
+
+    const marginInput = document.createElement('input');
+    marginInput.type = 'number';
+    marginInput.min = '0'; marginInput.max = '100'; marginInput.step = '1';
+    marginInput.placeholder = '%';
+    marginInput.style.cssText =
+      'width:52px;font-size:0.72rem;padding:3px 6px;border:1px solid var(--border);' +
+      'border-radius:5px;text-align:right;';
+    marginWrap.appendChild(marginInput);
+
+    const marginApply = document.createElement('button');
+    marginApply.style.cssText =
+      'font-size:0.72rem;padding:3px 10px;border-radius:5px;border:1px solid var(--primary);' +
+      'background:var(--primary-light);color:var(--primary);cursor:pointer;font-weight:500;white-space:nowrap;';
+    marginApply.textContent = 'Apply';
+    marginApply.addEventListener('click', () => {
+      const v = parseFloat(marginInput.value);
+      if (isNaN(v) || v < 0 || v > 100) { showToast('Enter a margin between 0 and 100', 'warning'); return; }
+      _lineItems.forEach(line => { line.margin = v; });
+      marginInput.value = '';
+      emitSummary(); render();
+      showToast(`Margin set to ${v}% for all items`, 'success');
+    });
+    marginInput.addEventListener('keydown', e => { if (e.key === 'Enter') marginApply.click(); });
+    marginWrap.appendChild(marginApply);
+    toolbar.appendChild(marginWrap);
+
+    el.appendChild(toolbar);
+
+    // ── Table ─────────────────────────────────────────────────────
     const table = document.createElement('table');
     table.className = 'presentation-grid';
     table.setAttribute('tabindex','0');
