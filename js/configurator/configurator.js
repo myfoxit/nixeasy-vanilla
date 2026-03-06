@@ -72,12 +72,20 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   let savePopoverInstance = null;
 
   // Changelog
-  let _savedSnapshot = [];   // lineItems as of last load or save
+  // Snapshot = { lineItems: [...], groups: [...] }
+  let _savedSnapshot = { lineItems: [], groups: [] };
   let _slas = [];            // for SLA name resolution in diffs
   let changelogPanelInstance = null;
 
-  /** Deep-clone a lineItems array for snapshot storage */
-  function cloneSnapshot(items) { return items.map(l => ({ ...l })); }
+  /** Snapshot current grid state */
+  function takeSnapshot() {
+    const lineItems = unifiedGridInstance ? unifiedGridInstance.getLineItems() : [];
+    const groups    = unifiedGridInstance ? unifiedGridInstance.getGroups()    : [];
+    return {
+      lineItems: lineItems.map(l => ({ ...l })),
+      groups:    groups.map(g => ({ ...g })),
+    };
+  }
 
   /** Unique key for a line item */
   function lineKey(l) {
@@ -88,18 +96,20 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
         : 'n:' + (l.name || '');
   }
 
-  /** Compute what changed between two lineItem arrays */
-  function diffLineItems(before, after) {
+  /** Compute what changed between two full snapshots */
+  function diffSnapshots(before, after) {
     const changes = [];
-    const bMap = new Map(before.map(l => [lineKey(l), l]));
-    const aMap = new Map(after.map(l  => [lineKey(l), l]));
+    const bLines = before.lineItems || [];
+    const aLines = after.lineItems  || [];
+    const bMap   = new Map(bLines.map(l => [lineKey(l), l]));
+    const aMap   = new Map(aLines.map(l => [lineKey(l), l]));
 
-    // Removed
+    // Removed items
     for (const [k, l] of bMap) {
       if (!aMap.has(k))
         changes.push({ action: 'item_removed', sku: l.sku || '', name: l.name || '' });
     }
-    // Added
+    // Added items
     for (const [k, l] of aMap) {
       if (!bMap.has(k))
         changes.push({ action: 'item_added', sku: l.sku || '', name: l.name || '' });
@@ -115,12 +125,25 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       if (Math.abs((al.price || 0) - (bl.price || 0)) > 0.001)
         changes.push({ action: 'price_changed', sku: al.sku || '', name: al.name, old: bl.price, new: al.price });
 
+      if ((al.amount || 1) !== (bl.amount || 1))
+        changes.push({ action: 'qty_changed', sku: al.sku || '', name: al.name, old: bl.amount, new: al.amount });
+
       if (al.sla !== bl.sla) {
         const oldName = _slas.find(s => s.id === bl.sla)?.name || bl.sla || 'None';
         const newName = _slas.find(s => s.id === al.sla)?.name || al.sla || 'None';
         changes.push({ action: 'sla_changed', sku: al.sku || '', name: al.name, old: oldName, new: newName });
       }
     }
+
+    // Group name changes
+    const bGrps = new Map((before.groups || []).map(g => [g.id, g]));
+    const aGrps = new Map((after.groups  || []).map(g => [g.id, g]));
+    for (const [id, ag] of aGrps) {
+      const bg = bGrps.get(id);
+      if (bg && ag.name !== bg.name)
+        changes.push({ action: 'group_renamed', old: bg.name, new: ag.name });
+    }
+
     return changes;
   }
 
@@ -173,8 +196,9 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     }
 
     // Write changelog (only for updates, not initial creation)
+    const currentSnapshot = { lineItems, groups };
     if (isUpdate) {
-      const changes = diffLineItems(_savedSnapshot, lineItems);
+      const changes = diffSnapshots(_savedSnapshot, currentSnapshot);
       if (changes.length > 0) {
         try {
           const clBody = { quote: qId, changes };
@@ -186,8 +210,11 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       }
     }
 
-    // Update snapshot to current state so next save diffs against this
-    _savedSnapshot = cloneSnapshot(lineItems);
+    // Update snapshot so next save diffs against current state
+    _savedSnapshot = {
+      lineItems: lineItems.map(l => ({ ...l })),
+      groups:    groups.map(g => ({ ...g })),
+    };
   }
 
   async function saveQuoteName() {
@@ -870,7 +897,10 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
           const groups = data.groups || data.containers || [];
           unifiedGridInstance.loadItems(items, groups);
           // Snapshot what we loaded so the first save diffs against it
-          _savedSnapshot = cloneSnapshot(items);
+          _savedSnapshot = {
+            lineItems: items.map(l => ({ ...l })),
+            groups:    groups.map(g => ({ ...g })),
+          };
         }
       } catch (err) {
         console.error('Failed to load quote:', err);
