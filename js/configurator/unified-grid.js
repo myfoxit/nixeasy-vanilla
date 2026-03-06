@@ -425,17 +425,12 @@ export function createUnifiedGrid({
   }
 
   function softDelete(item) {
-    item.hidden = true;
-    let savedGroupIds = [];
-    if (item.type === 'header') _items.forEach(i => { if (i.groupId === item.id) { savedGroupIds.push(i.id); delete i.groupId; } });
-    emitSummary(); render();
-    showToast('Deleted. <button onclick="this.closest(\'.toast\')?.dispatchEvent(new CustomEvent(\'undo\'))" style="background:none;border:none;color:var(--primary);text-decoration:underline;cursor:pointer;">Undo</button>', 'info');
-    const t = document.querySelectorAll('.toast'); const last = t[t.length-1];
-    if (last) last.addEventListener('undo', () => {
-      item.hidden = false;
-      if (item.type === 'header') _items.forEach(i => { if (savedGroupIds.includes(i.id)) i.groupId = item.id; });
-      emitSummary(); render();
-    }, { once: true });
+    if (item.type === 'header') {
+      // Remove header and ungroup its children
+      _items.forEach(i => { if (i.groupId === item.id) delete i.groupId; });
+    }
+    _items = _items.filter(i => i.id !== item.id);
+    reindex(); emitSummary(); render();
   }
 
   function mergeTwo(a, b) {
@@ -506,6 +501,12 @@ export function createUnifiedGrid({
       if (a>=0&&b>=0) { const [lo,hi]=[Math.min(a,b),Math.max(a,b)]; for(let i=lo;i<=hi;i++) selectedRows.add(v[i].id); }
     } else {
       checked ? selectedRows.add(id) : selectedRows.delete(id);
+      // If toggling a group header, select/deselect all children
+      const clicked = _items.find(i => i.id === id);
+      if (clicked?.type === 'header') {
+        _items.filter(i => i.groupId === id && !i.hidden)
+              .forEach(i => checked ? selectedRows.add(i.id) : selectedRows.delete(i.id));
+      }
     }
     lastClickedRow = id; emitSel(); render();
   }
@@ -540,9 +541,13 @@ export function createUnifiedGrid({
 
   function deleteSelected() {
     const cnt = selectedRows.size; if (!cnt) return;
-    [...selectedRows].forEach(id => { const it = _items.find(i=>i.id===id); if(it) it.hidden=true; });
-    selectedRows.clear(); emitSummary(); emitSel(); render();
-    showToast(`${cnt} row(s) deleted`, 'info');
+    [...selectedRows].forEach(id => {
+      const it = _items.find(i=>i.id===id);
+      if (!it) return;
+      if (it.type === 'header') _items.forEach(i => { if (i.groupId===id) delete i.groupId; });
+    });
+    _items = _items.filter(i => !selectedRows.has(i.id));
+    selectedRows.clear(); reindex(); emitSummary(); emitSel(); render();
   }
 
   // ── Floating bar (portal to body) ────────────────────────────────
@@ -610,10 +615,34 @@ export function createUnifiedGrid({
       requestAnimationFrame(() => tr.classList.add('pg-dragging'));
     });
 
+    let dropTargetGroupId = null;
+
+    function clearDropTargetHighlight() {
+      tbody.querySelectorAll('.pg-drop-target-group').forEach(r => r.classList.remove('pg-drop-target-group'));
+      dropTargetGroupId = null;
+    }
+
     tbody.addEventListener('dragover', e => {
       if (!dragId) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move';
       const trs = [...tbody.querySelectorAll('tr[data-id]:not(.pg-dragging)')];
       if (!trs.length) return;
+
+      // Check if hovering directly over a group header → highlight it as drop target
+      const hoveredTr = e.target.closest('tr[data-id]');
+      const hoveredItem = hoveredTr ? _items.find(i => i.id === hoveredTr.dataset.id) : null;
+      const dragItem = _items.find(i => i.id === dragId);
+
+      if (hoveredItem?.type === 'header' && dragItem?.type !== 'header') {
+        // Drop INTO group highlight mode
+        clearDropTargetHighlight();
+        dragIndicator?.remove(); dragIndicator = null; dropGap = null;
+        hoveredTr.classList.add('pg-drop-target-group');
+        dropTargetGroupId = hoveredItem.id;
+        return;
+      } else {
+        clearDropTargetHighlight();
+      }
+
       let best = 0, bestD = Infinity;
       trs.forEach((tr, i) => {
         const mid = (tr.getBoundingClientRect().top + tr.getBoundingClientRect().bottom) / 2;
@@ -629,13 +658,31 @@ export function createUnifiedGrid({
     });
 
     tbody.addEventListener('dragleave', e => {
-      if (!tbody.contains(e.relatedTarget)) { dragIndicator?.remove(); dragIndicator = null; dropGap = null; }
+      if (!tbody.contains(e.relatedTarget)) {
+        dragIndicator?.remove(); dragIndicator = null; dropGap = null;
+        clearDropTargetHighlight();
+      }
     });
 
     tbody.addEventListener('drop', e => {
       e.preventDefault();
       dragIndicator?.remove(); dragIndicator = null;
       tbody.querySelectorAll('.pg-dragging').forEach(r => r.classList.remove('pg-dragging'));
+
+      // Drop INTO group
+      if (dropTargetGroupId) {
+        const dragItem = _items.find(i => i.id === dragId);
+        if (dragItem && dragItem.type !== 'header') {
+          dragItem.groupId = dropTargetGroupId;
+          // Place at end of group's items
+          const groupItems = _items.filter(i => i.groupId === dropTargetGroupId);
+          dragItem.order = groupItems.reduce((max, i) => Math.max(max, i.order), 0) + 1;
+        }
+        clearDropTargetHighlight();
+        dragId = null; dropGap = null; reindex(); render();
+        return;
+      }
+
       if (!dragId || dropGap == null) { dragId = null; return; }
 
       const ids = [...tbody.querySelectorAll('tr[data-id]')].map(r => r.dataset.id);
@@ -925,7 +972,7 @@ export function createUnifiedGrid({
 
     // ── Col 2: Type + SKU combined cell ──────────────────────────
     const tdTypeSku = document.createElement('td');
-    tdTypeSku.style.cssText = 'padding:0 10px;white-space:nowrap;user-select:none;';
+    tdTypeSku.style.cssText = `padding:0 10px;white-space:nowrap;user-select:none;${isGrouped?'padding-left:28px;':''}`;
     if (isMerged) {
       const mb = document.createElement('span'); mb.className='pg-merged-badge'; mb.style.display='block';
       mb.innerHTML=`<span>${item._mergedIdx?.length||2} merged</span>`;
@@ -949,10 +996,7 @@ export function createUnifiedGrid({
     tdName.className = 'pg-cell-editable';
     tdName.setAttribute('data-row', rowIdx);
     tdName.setAttribute('data-col', 3);
-    // Bigger indentation for grouped items + subtle left guide line
-    if (isGrouped) {
-      tdName.style.cssText = 'padding-left:28px;border-left:2px solid var(--primary-light);';
-    }
+    if (isGrouped) tdName.style.cssText = 'padding-left:8px;';
 
     tdName.setAttribute('contenteditable', 'true');
     tdName.textContent = dName(item);
@@ -1019,8 +1063,9 @@ export function createUnifiedGrid({
     tr.appendChild(tdQty);
 
     // ── Col 6: Unit Price ─────────────────────────────────────────
-    const tdPrice=makeCell(item,'price',dPrice(item).toFixed(2),rowIdx,6);
-    if(modified&&changes.price!=null) attachChangeTip(tdPrice,'price',changes.price.toFixed(2));
+    const tdPrice=makeCell(item,'price',currency(dPrice(item)),rowIdx,6);
+    tdPrice.style.textAlign='right';
+    if(modified&&changes.price!=null) attachChangeTip(tdPrice,'price',currency(changes.price));
     tr.appendChild(tdPrice);
 
     // ── Col 7: Margin % ───────────────────────────────────────────
@@ -1197,18 +1242,6 @@ export function createUnifiedGrid({
       });
     });
 
-    // Hidden rows
-    hidden.forEach(item => {
-      const tr = document.createElement('tr'); tr.className='hidden-row'; tr.dataset.id=item.id;
-      [null,null,dSku(item),dName(item),null,dQty(item),currency(dPrice(item)),dMargin(item).toFixed(1)+'%',currency(calcTotal(item)),null,null,null].forEach((v,i) => {
-        const td = document.createElement('td'); if(v!=null) td.textContent=v; tr.appendChild(td);
-      });
-      const tdA = document.createElement('td');
-      const rb = document.createElement('button'); rb.className='btn btn-ghost btn-sm'; rb.style.cssText='font-size:0.7rem;color:var(--primary);'; rb.textContent='Restore';
-      rb.addEventListener('click', () => { item.hidden=false; emitSummary(); render(); });
-      tdA.appendChild(rb); tr.appendChild(tdA); tbody.appendChild(tr);
-    });
-
     // Grand total (light, not black)
     if (visible.filter(i=>i.type==='item').length > 0) tbody.appendChild(buildGrandTotal(grandTotal, grandMonthly));
 
@@ -1218,12 +1251,12 @@ export function createUnifiedGrid({
     tbody.addEventListener('click', e => {
       if (e.target.closest('button,input,[contenteditable="true"],.pg-merged-badge,.pg-unmerge-btn,.sla-tag')) return;
       const tr = e.target.closest('tr[data-id]');
-      if (!tr || tr.classList.contains('hidden-row')) return;
+      if (!tr) return;
       handleClick(tr.dataset.id, e);
     });
     tbody.addEventListener('contextmenu', e => {
       const tr = e.target.closest('tr[data-id]');
-      if (!tr || tr.classList.contains('hidden-row')) return;
+      if (!tr) return;
       const item = _items.find(i => i.id===tr.dataset.id);
       if (item) showCtx(e, item);
     });

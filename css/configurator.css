@@ -1382,7 +1382,7 @@
 /* Header (section) row */
 .presentation-grid .header-row td {
   background: #eef2ff;
-  border-top: 2px solid var(--primary);
+  border-top: 3px solid var(--border);
   border-bottom: 1px solid #d4d9e8;
   height: 50px;
 }
@@ -1413,6 +1413,14 @@
 /* Grouped item rows — indent applied inline in JS now, just add left accent */
 .presentation-grid .grouped-item td:first-child {
   border-left: 3px solid var(--primary);
+}
+
+/* Group drop target highlight when dragging into a group */
+.presentation-grid .pg-drop-target-group td {
+  background: var(--primary-light) !important;
+  outline: 2px dashed var(--primary);
+  outline-offset: -2px;
+  transition: background 0.1s;
 }
 
 /* Wizard Steps */

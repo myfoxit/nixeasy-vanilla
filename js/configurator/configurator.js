@@ -86,8 +86,15 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     });
   }
 
+  let _autoSaveTimer = null;
+  function triggerAutoSave() {
+    clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(() => save(), 1200);
+  }
+
   function onSummaryChange(summary) {
     if (summaryCardInstance) summaryCardInstance.update(summary);
+    triggerAutoSave();
   }
 
   // ======================================================
