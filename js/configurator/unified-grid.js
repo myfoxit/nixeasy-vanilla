@@ -147,9 +147,8 @@ export function createUnifiedGrid({
     if (!line || line.itemType === 'servicepack') return [];
     const lic = licenses.find(l => l.id === line.licenseId);
     if (!lic?.depends_on?.length) return [];
-    // Use only currently visible items (deleted items removed from _items but not _lineItems)
-    const visIdxs = new Set(_items.filter(i => i.type === 'item' && !i.hidden).map(i => i.lineIdx));
-    const presentIds = new Set(_lineItems.filter((_, idx) => visIdxs.has(idx)).map(l => l.licenseId));
+    // _lineItems is now properly cleaned up on delete — no orphans
+    const presentIds = new Set(_lineItems.map(l => l.licenseId));
     return lic.depends_on.filter(id => !presentIds.has(id))
       .map(id => licenses.find(l => l.id === id)).filter(Boolean);
   }
@@ -448,13 +447,28 @@ export function createUnifiedGrid({
     showToast('Row duplicated', 'success');
   }
 
+  /** Remove a lineItem at index li from _lineItems/_originals and fix all lineIdx refs */
+  function removeLineData(li) {
+    _lineItems.splice(li, 1);
+    _originals.splice(li, 1);
+    _items.forEach(i => {
+      if (i.type !== 'item' || i.lineIdx == null) return;
+      if (i.lineIdx > li) i.lineIdx--;
+      // merged sub-indices
+      if (i._mergedIdx) i._mergedIdx = i._mergedIdx
+        .filter(idx => idx !== li)
+        .map(idx => idx > li ? idx - 1 : idx);
+    });
+  }
+
   function softDelete(item) {
     if (item.type === 'header') {
-      // Remove header and ungroup its children
       _items.forEach(i => { if (i.groupId === item.id) delete i.groupId; });
+    } else if (item.lineIdx != null) {
+      removeLineData(item.lineIdx);
     }
     _items = _items.filter(i => i.id !== item.id);
-    reindex(); emitSummary(); render();
+    reindex(); render(); emitSummary();
   }
 
   function mergeTwo(a, b) {
@@ -565,13 +579,20 @@ export function createUnifiedGrid({
 
   function deleteSelected() {
     const cnt = selectedRows.size; if (!cnt) return;
-    [...selectedRows].forEach(id => {
-      const it = _items.find(i=>i.id===id);
-      if (!it) return;
-      if (it.type === 'header') _items.forEach(i => { if (i.groupId===id) delete i.groupId; });
+    // Collect lineIdxs to remove (descending order so splicing doesn't shift earlier indices)
+    const toRemove = [...selectedRows]
+      .map(id => _items.find(i => i.id === id))
+      .filter(Boolean);
+    toRemove.forEach(it => {
+      if (it.type === 'header') _items.forEach(i => { if (i.groupId === it.id) delete i.groupId; });
     });
+    const lineIdxs = toRemove
+      .filter(it => it.type === 'item' && it.lineIdx != null)
+      .map(it => it.lineIdx)
+      .sort((a, b) => b - a);  // descending — remove from end first
+    lineIdxs.forEach(li => removeLineData(li));
     _items = _items.filter(i => !selectedRows.has(i.id));
-    selectedRows.clear(); reindex(); emitSummary(); emitSel(); render();
+    selectedRows.clear(); reindex(); render(); emitSummary(); emitSel();
   }
 
   // ── Floating bar (portal to body) ────────────────────────────────
