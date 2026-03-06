@@ -284,7 +284,8 @@ export function createUnifiedGrid({
     } else if (field === 'note') {
       item.note = raw;
     } else if (['qty','price','margin'].includes(field)) {
-      const n = parseFloat(raw);
+      // Strip currency symbol and thousands separators before parsing
+      const n = parseFloat(raw.replace(/[^0-9.,-]/g, '').replace(',', '.'));
       if (isNaN(n)) return;
       if (field === 'qty')    line.amount = Math.max(0, n);
       if (field === 'price')  line.price  = Math.max(0, n);
@@ -1063,8 +1064,15 @@ export function createUnifiedGrid({
     tr.appendChild(tdQty);
 
     // ── Col 6: Unit Price ─────────────────────────────────────────
-    const tdPrice=makeCell(item,'price',currency(dPrice(item)),rowIdx,6);
+    // Display as currency but store raw number for editing
+    const tdPrice=makeCell(item,'price',dPrice(item).toFixed(2),rowIdx,6);
     tdPrice.style.textAlign='right';
+    // Decorate display with € prefix (shown when not editing)
+    tdPrice.dataset.display = currency(dPrice(item));
+    tdPrice.dataset.raw     = dPrice(item).toFixed(2);
+    tdPrice.textContent     = currency(dPrice(item));
+    // On focus show raw, on blur show formatted
+    tdPrice.addEventListener('focus', () => { tdPrice.textContent = dPrice(item).toFixed(2); });
     if(modified&&changes.price!=null) attachChangeTip(tdPrice,'price',currency(changes.price));
     tr.appendChild(tdPrice);
 
@@ -1175,9 +1183,8 @@ export function createUnifiedGrid({
     destroyFloatingBar();
 
     const visible = vis();
-    const hidden  = _items.filter(i=>i.hidden).sort((a,b)=>a.order-b.order);
 
-    if (!visible.length && !hidden.length) {
+    if (!visible.length) {
       el.innerHTML = `<div style="text-align:center;padding:3rem 2rem;color:var(--text-secondary);">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor"
              style="width:44px;height:44px;margin:0 auto 14px;opacity:0.35;display:block;">
