@@ -16,7 +16,7 @@ import { currency } from '../utils/format.js';
  *
  * @param {HTMLElement} container
  */
-export function createQuotesListView(container) {
+export function createQuotesListView(container, { oppId } = {}) {
   container.innerHTML = '';
   const currentUser = pb.authStore.model;
 
@@ -248,7 +248,12 @@ export function createQuotesListView(container) {
 
     try {
       let filter = '';
-      if (search) {
+      if (oppId) {
+        filter = `opportunity = "${oppId}"`;
+        if (search) {
+          filter += ` && (opportunity.title ~ "${search}" || opportunity.customer.name ~ "${search}" || created_by.email ~ "${search}")`;
+        }
+      } else if (search) {
         filter = `opportunity.title ~ "${search}" || opportunity.customer.name ~ "${search}" || created_by.email ~ "${search}"`;
       }
       let sort = '-updated';
