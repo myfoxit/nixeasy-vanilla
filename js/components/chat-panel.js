@@ -449,73 +449,81 @@ async function sendMessage(input) {
     const decoder = new TextDecoder();
     let buffer = '';
     let bubbleEl = null;
+    let currentEventType = '';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
 
-      let eventType = '';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          eventType = line.slice(7).trim();
-        } else if (line.startsWith('data: ')) {
-          const data = JSON.parse(line.slice(6));
+      // SSE events are separated by double newlines
+      let sepIdx;
+      while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
+        const block = buffer.slice(0, sepIdx);
+        buffer = buffer.slice(sepIdx + 2);
 
-          if (eventType === 'status') {
-            currentProvider = data;
-          } else if (eventType === 'token') {
-            // Remove typing indicator on first token
-            if (typingEl.parentNode) typingEl.remove();
+        let eventType = '';
+        let dataStr = '';
 
-            assistantMsg.content += data.token;
-
-            // Create or update bubble
-            if (!bubbleEl) {
-              bubbleEl = document.createElement('div');
-              bubbleEl.className = 'chat-bubble assistant';
-              container.appendChild(bubbleEl);
-            }
-            bubbleEl.innerHTML = renderMarkdown(assistantMsg.content);
-            container.scrollTop = container.scrollHeight;
-          } else if (eventType === 'tool') {
-            if (typingEl.parentNode) typingEl.remove();
-
-            assistantMsg.toolCalls.push({
-              name: data.name,
-              args: data.args,
-              summary: `${getToolIcon(data.name)} ${formatToolName(data.name)}${data.resultCount !== undefined ? ` (${data.resultCount})` : ''}`,
-            });
-
-            // Render tool chip
-            const wrap = document.createElement('div');
-            wrap.style.alignSelf = 'flex-start';
-            const chip = document.createElement('button');
-            chip.className = 'chat-tool-chip';
-            chip.textContent = assistantMsg.toolCalls[assistantMsg.toolCalls.length - 1].summary;
-            const detail = document.createElement('div');
-            detail.className = 'chat-tool-detail';
-            detail.textContent = JSON.stringify(data.args, null, 2);
-            chip.addEventListener('click', () => detail.classList.toggle('open'));
-            wrap.appendChild(chip);
-            wrap.appendChild(detail);
-            container.appendChild(wrap);
-            container.scrollTop = container.scrollHeight;
-          } else if (eventType === 'error') {
-            if (typingEl.parentNode) typingEl.remove();
-            messages.push({ role: 'error', content: data.error });
-            const errBubble = document.createElement('div');
-            errBubble.className = 'chat-bubble error';
-            errBubble.textContent = data.error;
-            container.appendChild(errBubble);
-          } else if (eventType === 'done') {
-            // done
+        for (const line of block.split('\n')) {
+          if (line.startsWith('event: ') || line.startsWith('event:')) {
+            eventType = line.slice(line.indexOf(':') + 1).trim();
+          } else if (line.startsWith('data: ') || line.startsWith('data:')) {
+            dataStr = line.slice(line.indexOf(':') + 1).trim();
           }
-          eventType = '';
         }
+
+        if (!dataStr) continue;
+
+        let data;
+        try { data = JSON.parse(dataStr); } catch { continue; }
+
+        if (eventType === 'status') {
+          currentProvider = data;
+        } else if (eventType === 'token') {
+          if (typingEl.parentNode) typingEl.remove();
+
+          assistantMsg.content += data.token;
+
+          if (!bubbleEl) {
+            bubbleEl = document.createElement('div');
+            bubbleEl.className = 'chat-bubble assistant';
+            container.appendChild(bubbleEl);
+          }
+          bubbleEl.innerHTML = renderMarkdown(assistantMsg.content);
+          container.scrollTop = container.scrollHeight;
+        } else if (eventType === 'tool') {
+          if (typingEl.parentNode) typingEl.remove();
+
+          assistantMsg.toolCalls.push({
+            name: data.name,
+            args: data.args,
+            summary: `${getToolIcon(data.name)} ${formatToolName(data.name)}${data.resultCount !== undefined ? ` (${data.resultCount})` : ''}`,
+          });
+
+          const wrap = document.createElement('div');
+          wrap.style.alignSelf = 'flex-start';
+          const chip = document.createElement('button');
+          chip.className = 'chat-tool-chip';
+          chip.textContent = assistantMsg.toolCalls[assistantMsg.toolCalls.length - 1].summary;
+          const detail = document.createElement('div');
+          detail.className = 'chat-tool-detail';
+          detail.textContent = JSON.stringify(data.args, null, 2);
+          chip.addEventListener('click', () => detail.classList.toggle('open'));
+          wrap.appendChild(chip);
+          wrap.appendChild(detail);
+          container.appendChild(wrap);
+          container.scrollTop = container.scrollHeight;
+        } else if (eventType === 'error') {
+          if (typingEl.parentNode) typingEl.remove();
+          messages.push({ role: 'error', content: data.error });
+          const errBubble = document.createElement('div');
+          errBubble.className = 'chat-bubble error';
+          errBubble.textContent = data.error;
+          container.appendChild(errBubble);
+        }
+        // 'done' event — just let it pass
       }
     }
 
