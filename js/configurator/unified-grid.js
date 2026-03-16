@@ -125,7 +125,7 @@ export function createUnifiedGrid({
     // qty and margin are intentional user edits — no indicator/reset for those
     if (line.name !== orig.name) changes.name = orig.name;
     if (Math.abs(line.price - orig.price) > 0.001) changes.price = orig.price;
-    if (line.sla !== orig.sla) changes.sla = orig.sla;
+    // SLA changes are tracked in changelog but not highlighted/restorable
     return changes;
   }
   function isModified(item) { return Object.keys(getChanges(item)).length > 0; }
@@ -135,7 +135,7 @@ export function createUnifiedGrid({
     if (!line || !orig) return;
     line.name   = orig.name;
     line.price  = orig.price;
-    line.sla    = orig.sla;
+    // SLA is intentionally not reset — not a restorable change
     item.displayName  = null;
     item.displayPrice = null;
     emitSummary(); render();

@@ -128,7 +128,11 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       if ((al.amount || 1) !== (bl.amount || 1))
         changes.push({ action: 'qty_changed', sku: al.sku || '', name: al.name, old: bl.amount, new: al.amount });
 
-      // SLA changes are not tracked in changelog (intentional)
+      if (al.sla !== bl.sla) {
+        const oldName = _slas.find(s => s.id === bl.sla)?.name || bl.sla || 'None';
+        const newName = _slas.find(s => s.id === al.sla)?.name || al.sla || 'None';
+        changes.push({ action: 'sla_changed', sku: al.sku || '', name: al.name, old: oldName, new: newName });
+      }
     }
 
     // Group name changes
