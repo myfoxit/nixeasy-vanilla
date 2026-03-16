@@ -2,9 +2,16 @@
 
 import { currency } from '../../utils/format.js';
 
+function uid() {
+  try { return uid(); } catch { return 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+}
+
 export function createStepDesign({ wizardState, onStateChange }) {
   const el = document.createElement('div');
   el.style.cssText = 'display:flex;flex-direction:column;gap:16px;height:calc(100vh - 280px);min-height:400px;';
+
+  // Ensure groups array exists
+  if (!Array.isArray(wizardState.groups)) wizardState.groups = [];
 
   let selectedLineId = null;
 
@@ -51,13 +58,17 @@ export function createStepDesign({ wizardState, onStateChange }) {
   }
 
   function addGroup() {
-    wizardState.groups.push({
-      id: crypto.randomUUID(),
-      name: 'New Group',
-      lines: [],
-    });
-    onStateChange();
-    render();
+    try {
+      wizardState.groups.push({
+        id: uid(),
+        name: 'New Group',
+        lines: [],
+      });
+      onStateChange();
+      render();
+    } catch (err) {
+      console.error('addGroup failed:', err);
+    }
   }
 
   function removeGroup(idx) {
@@ -68,11 +79,16 @@ export function createStepDesign({ wizardState, onStateChange }) {
   }
 
   function addLineItem(groupIdx) {
-    const newLine = { id: crypto.randomUUID(), text: '', amount: 1, items: [] };
-    wizardState.groups[groupIdx].lines.push(newLine);
-    selectedLineId = newLine.id;
-    onStateChange();
-    render();
+    try {
+      const newLine = { id: uid(), text: '', amount: 1, items: [] };
+      if (!wizardState.groups[groupIdx]) { console.error('addLineItem: invalid groupIdx', groupIdx); return; }
+      wizardState.groups[groupIdx].lines.push(newLine);
+      selectedLineId = newLine.id;
+      onStateChange();
+      render();
+    } catch (err) {
+      console.error('addLineItem failed:', err);
+    }
   }
 
   function removeLineItem(groupIdx, lineIdx) {
@@ -84,7 +100,10 @@ export function createStepDesign({ wizardState, onStateChange }) {
   }
 
   function allocate(sourceItem, shiftKey) {
-    if (!selectedLineId) return;
+    if (!selectedLineId) {
+      console.warn('allocate: no line selected');
+      return;
+    }
     const qtyToAllocate = shiftKey ? 1 : sourceItem.availableQty;
     if (qtyToAllocate <= 0) return;
 
@@ -137,6 +156,7 @@ export function createStepDesign({ wizardState, onStateChange }) {
   }
 
   function render() {
+    console.log('[step-design] render() called, groups:', wizardState.groups.length, 'el in DOM:', !!el.parentNode);
     el.innerHTML = '';
 
     // Header bar
