@@ -2,6 +2,7 @@
 
 import { currency } from '../../utils/format.js';
 import { getMeasurePointTag } from '../../utils/license-calculations.js';
+import { showToast } from '../../components/toast.js';
 
 const ITEMS_PER_PAGE = 20;
 const DEFAULT_MARGIN = 25;
@@ -12,11 +13,15 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
 
   let search = '';
   let currentPage = 1;
+  let levelFilter = 'ALL'; // ALL, BASE, MODULE, ADDON, DL
 
   function getFiltered() {
     const q = search.toLowerCase();
     return licenses
-      .filter(l => (l.name + l.sku).toLowerCase().includes(q))
+      .filter(l => {
+        if (levelFilter !== 'ALL' && l.type !== levelFilter) return false;
+        return (l.name + l.sku).toLowerCase().includes(q);
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -26,7 +31,25 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
     if (existing) {
       existing.amount = (existing.amount || 1) + 1;
     } else {
-      items.push({
+      // Dependency validation
+      if (license.depends_on) {
+        const hasDep = items.some(l => l.licenseId === license.depends_on);
+        if (!hasDep) {
+          const depLic = licenses.find(l => l.id === license.depends_on);
+          showToast(`Dependency missing: requires ${depLic?.name || license.depends_on}`, 'error');
+          return;
+        }
+      }
+      // Addon must have a parent of same product line
+      if (license.type === 'ADDON' && license.product) {
+        const hasParent = items.some(l => l.product === license.product && (l.type === 'BASE' || l.type === 'MODULE'));
+        if (!hasParent) {
+          showToast(`Missing parent module/base for product line: ${license.product}`, 'error');
+          return;
+        }
+      }
+
+      const newItem = {
         licenseId: license.id,
         name: license.name,
         sku: license.sku,
@@ -40,7 +63,27 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
         itemType: 'license',
         containerId: null,
         _order: items.length,
-      });
+        type: license.type || '',
+        product: license.product || '',
+      };
+
+      // Flat-tree insertion: place after last item of same product line
+      if (license.product) {
+        let insertIdx = -1;
+        for (let i = items.length - 1; i >= 0; i--) {
+          if (items[i].product === license.product && items[i].itemType !== 'servicepack') {
+            insertIdx = i;
+            break;
+          }
+        }
+        if (insertIdx !== -1) {
+          items.splice(insertIdx + 1, 0, newItem);
+        } else {
+          items.push(newItem);
+        }
+      } else {
+        items.push(newItem);
+      }
     }
     onStateChange();
     render();
@@ -104,10 +147,36 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
 
         const left = document.createElement('div');
         left.style.cssText = 'flex:1;display:flex;flex-direction:column;';
-        const badge = document.createElement('span');
-        badge.style.cssText = `font-size:0.55rem;font-weight:600;padding:1px 5px;border-radius:3px;background:${tBg};color:${tColor};text-transform:uppercase;letter-spacing:0.03em;display:inline-block;margin-bottom:2px;align-self:flex-start;`;
-        badge.textContent = tText;
-        left.appendChild(badge);
+        // Badge row: type badge + product badge
+        const badgeRow = document.createElement('div');
+        badgeRow.style.cssText = 'display:flex;gap:4px;margin-bottom:2px;';
+        // Type badge (BASE/MODULE/ADDON/DL)
+        const TYPE_BADGE_COLORS = {
+          BASE: { color: '#4f46e5', bg: '#eef2ff' },
+          MODULE: { color: '#eab308', bg: '#fefce8' },
+          ADDON: { color: '#f97316', bg: '#fff7ed' },
+          DL: { color: '#06b6d4', bg: '#ecfeff' },
+        };
+        const tbc = TYPE_BADGE_COLORS[lic.type] || { color: 'var(--primary)', bg: 'var(--primary-light)' };
+        const typeBadge = document.createElement('span');
+        typeBadge.style.cssText = `font-size:0.55rem;font-weight:600;padding:1px 5px;border-radius:3px;background:${tbc.bg};color:${tbc.color};text-transform:uppercase;letter-spacing:0.03em;`;
+        typeBadge.textContent = lic.type || 'LICENSE';
+        badgeRow.appendChild(typeBadge);
+        // Product badge (CORE/MONI/AS/DM/LOG/COLLAB)
+        if (lic.product) {
+          const prodBadge = document.createElement('span');
+          prodBadge.style.cssText = 'font-size:0.55rem;font-weight:600;padding:1px 5px;border-radius:3px;background:#f3f4f6;color:#6b7280;text-transform:uppercase;letter-spacing:0.03em;';
+          prodBadge.textContent = lic.product;
+          badgeRow.appendChild(prodBadge);
+        }
+        // Measure point tag (if any)
+        if (tag) {
+          const mpBadge = document.createElement('span');
+          mpBadge.style.cssText = `font-size:0.55rem;font-weight:600;padding:1px 5px;border-radius:3px;background:${tBg};color:${tColor};text-transform:uppercase;letter-spacing:0.03em;`;
+          mpBadge.textContent = tText;
+          badgeRow.appendChild(mpBadge);
+        }
+        left.appendChild(badgeRow);
         const nameEl = document.createElement('span');
         nameEl.style.cssText = 'font-weight:500;font-size:0.875rem;color:var(--text-main);';
         nameEl.textContent = lic.name;
@@ -174,23 +243,64 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
       emptyRow.appendChild(emptyCell);
       itemsBodyEl.appendChild(emptyRow);
     } else {
-      licenseItems.forEach(item => {
+      // Determine tree depth: BASE/DL=0, MODULE=1, ADDON=2
+      // Also check if current item is last child of its parent for connector line styling
+      const getDepth = (item) => {
+        if (item.type === 'ADDON') return 2;
+        if (item.type === 'MODULE') return 1;
+        return 0;
+      };
+
+      // Type badge colors
+      const TYPE_COLORS = {
+        BASE: { color: '#4f46e5', bg: '#eef2ff' },
+        MODULE: { color: '#eab308', bg: '#fefce8' },
+        ADDON: { color: '#f97316', bg: '#fff7ed' },
+        DL: { color: '#06b6d4', bg: '#ecfeff' },
+      };
+
+      licenseItems.forEach((item, idx) => {
         const realIdx = wizardState.lineItems.indexOf(item);
+        const depth = getDepth(item);
         const tr = document.createElement('tr');
         tr.style.cssText = 'border-bottom:1px solid var(--border);';
-        tr.addEventListener('mouseenter', () => { tr.style.background = 'var(--hover-bg)'; });
+        tr.addEventListener('mouseenter', () => { tr.style.background = 'var(--surface-hover)'; });
         tr.addEventListener('mouseleave', () => { tr.style.background = ''; });
 
-        // SKU
+        // Check if next sibling is also indented (for vertical line continuation)
+        const nextItem = licenseItems[idx + 1];
+        const nextDepth = nextItem ? getDepth(nextItem) : 0;
+        const hasChildBelow = nextDepth > 0 && nextItem?.product === item.product;
+
+        // SKU — with indent
         const tdSku = document.createElement('td');
-        tdSku.style.cssText = 'padding:8px 12px;font-family:monospace;font-size:0.8rem;color:var(--text-secondary);';
-        tdSku.textContent = item.sku;
+        tdSku.style.cssText = 'padding:8px 12px;font-family:monospace;font-size:0.8rem;color:var(--text-secondary);white-space:nowrap;';
+        if (depth > 0) {
+          const indent = document.createElement('span');
+          indent.style.cssText = `display:inline-block;width:${depth * 20}px;position:relative;`;
+          // Tree connector: vertical line + horizontal branch
+          const connector = document.createElement('span');
+          connector.style.cssText = `position:absolute;left:${(depth - 1) * 20 + 8}px;top:-12px;width:12px;height:20px;border-left:1px solid var(--border);border-bottom:1px solid var(--border);border-bottom-left-radius:4px;`;
+          indent.appendChild(connector);
+          tdSku.appendChild(indent);
+        }
+        const skuText = document.createElement('span');
+        skuText.textContent = item.sku;
+        tdSku.appendChild(skuText);
         tr.appendChild(tdSku);
 
-        // Name
+        // Name — with type badge dot
         const tdName = document.createElement('td');
         tdName.style.cssText = 'padding:8px 12px;font-weight:500;font-size:0.875rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-        tdName.textContent = item.name;
+        const tc = TYPE_COLORS[item.type] || TYPE_COLORS.BASE;
+        const typeDot = document.createElement('span');
+        typeDot.style.cssText = `display:inline-block;width:8px;height:8px;border-radius:50%;background:${tc.color};margin-right:6px;vertical-align:middle;flex-shrink:0;`;
+        typeDot.title = item.type || 'LICENSE';
+        tdName.appendChild(typeDot);
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = item.name;
+        nameSpan.style.cssText = 'vertical-align:middle;';
+        tdName.appendChild(nameSpan);
         tdName.title = item.name;
         tr.appendChild(tdName);
 
@@ -303,6 +413,26 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
     catalogTitle.style.cssText = 'margin:0 0 8px 0;font-size:0.95rem;color:var(--text-main);';
     catalogTitle.textContent = 'License Catalog';
     catalogHeader.appendChild(catalogTitle);
+
+    // Level filter tabs
+    const filterRow = document.createElement('div');
+    filterRow.style.cssText = 'display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;';
+    const LEVEL_TABS = [
+      { key: 'ALL', label: 'All' },
+      { key: 'BASE', label: 'Base' },
+      { key: 'MODULE', label: 'Module' },
+      { key: 'ADDON', label: 'Add-on' },
+      { key: 'DL', label: 'Device' },
+    ];
+    LEVEL_TABS.forEach(tab => {
+      const btn = document.createElement('button');
+      const isActive = levelFilter === tab.key;
+      btn.style.cssText = `padding:3px 10px;border:1px solid ${isActive ? 'var(--primary)' : 'var(--border)'};border-radius:4px;font-size:0.7rem;font-weight:${isActive ? '600' : '500'};cursor:pointer;transition:all 0.15s;background:${isActive ? 'var(--primary)' : 'var(--surface)'};color:${isActive ? 'white' : 'var(--text-secondary)'};`;
+      btn.textContent = tab.label;
+      btn.addEventListener('click', () => { levelFilter = tab.key; currentPage = 1; render(); });
+      filterRow.appendChild(btn);
+    });
+    catalogHeader.appendChild(filterRow);
 
     const searchInput = document.createElement('input');
     searchInput.placeholder = 'Search licenses...';

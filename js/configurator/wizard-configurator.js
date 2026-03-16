@@ -150,17 +150,17 @@ export function createWizardConfiguratorView(container, { oppId, quoteId, templa
       const isPast = idx < currentStep;
 
       tab.style.cssText = `
-        display:flex;align-items:center;gap:6px;padding:8px 16px;border:none;
+        display:flex;align-items:center;gap:4px;padding:4px 10px;border:none;
         background:${isActive ? 'var(--primary)' : 'transparent'};
         color:${isActive ? 'white' : isPast ? 'var(--primary)' : 'var(--text-secondary)'};
-        font-weight:${isActive ? '600' : '500'};font-size:0.85rem;cursor:pointer;
-        border-radius:6px;transition:all 0.15s;white-space:nowrap;
+        font-weight:${isActive ? '600' : '500'};font-size:0.75rem;cursor:pointer;
+        border-radius:4px;transition:all 0.15s;white-space:nowrap;
       `;
 
       const numBadge = document.createElement('span');
       numBadge.style.cssText = `
         display:inline-flex;align-items:center;justify-content:center;
-        width:22px;height:22px;border-radius:50%;font-size:0.75rem;font-weight:700;
+        width:18px;height:18px;border-radius:50%;font-size:0.65rem;font-weight:700;
         background:${isActive ? 'rgba(255,255,255,0.25)' : isPast ? 'var(--primary-light)' : 'var(--bg)'};
         color:${isActive ? 'white' : isPast ? 'var(--primary)' : 'var(--text-secondary)'};
         border:${isPast ? '1px solid var(--primary)' : 'none'};
@@ -173,7 +173,7 @@ export function createWizardConfiguratorView(container, { oppId, quoteId, templa
       tab.appendChild(label);
 
       tab.addEventListener('mouseenter', () => {
-        if (!isActive) tab.style.background = 'var(--hover-bg)';
+        if (!isActive) tab.style.background = 'var(--surface-hover)';
       });
       tab.addEventListener('mouseleave', () => {
         if (!isActive) tab.style.background = 'transparent';
@@ -278,7 +278,7 @@ export function createWizardConfiguratorView(container, { oppId, quoteId, templa
 
     headerTop.appendChild(headerLeft);
 
-    // Right: view toggle + save
+    // Right: view toggle + save + step nav — ALL in one row
     const headerRight = document.createElement('div');
     headerRight.style.cssText = 'display:flex;gap:8px;align-items:center;margin-left:auto;';
 
@@ -301,13 +301,18 @@ export function createWizardConfiguratorView(container, { oppId, quoteId, templa
       headerRight.appendChild(saveBtn);
     }
 
+    // Separator between buttons and step nav
+    const sep = document.createElement('div');
+    sep.style.cssText = 'width:1px;height:24px;background:var(--border);margin:0 4px;';
+    headerRight.appendChild(sep);
+
+    // Step navigation — inline with buttons
+    stepNavEl = document.createElement('div');
+    stepNavEl.style.cssText = 'display:flex;gap:2px;align-items:center;';
+    headerRight.appendChild(stepNavEl);
+
     headerTop.appendChild(headerRight);
     header.appendChild(headerTop);
-
-    // Step navigation row
-    stepNavEl = document.createElement('div');
-    stepNavEl.style.cssText = 'display:flex;gap:4px;margin-top:10px;overflow-x:auto;';
-    header.appendChild(stepNavEl);
 
     container.appendChild(header);
 
