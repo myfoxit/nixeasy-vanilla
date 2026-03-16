@@ -431,9 +431,6 @@ async function sendMessage(input) {
     role: m.role, content: m.content || '',
   }));
 
-  // Create assistant message placeholder
-  const assistantMsg = { role: 'assistant', content: '', toolCalls: [] };
-
   try {
     const res = await fetch('/ai/chat', {
       method: 'POST',
@@ -446,85 +443,29 @@ async function sendMessage(input) {
       throw new Error(`HTTP ${res.status}: ${errText}`);
     }
 
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let bubbleEl = null;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-        const dataStr = trimmed.slice(6);
-        if (dataStr === '[DONE]') continue;
-
-        let data;
-        try { data = JSON.parse(dataStr); } catch { continue; }
-
-        // Error
-        if (data.type === 'error') {
-          if (typingEl.parentNode) typingEl.remove();
-          messages.push({ role: 'error', content: data.error });
-          const errBubble = document.createElement('div');
-          errBubble.className = 'chat-bubble error';
-          errBubble.textContent = data.error;
-          container.appendChild(errBubble);
-          continue;
-        }
-
-        // Tool call
-        if (data.tool_call) {
-          if (typingEl.parentNode) typingEl.remove();
-          const tc = data.tool_call;
-          assistantMsg.toolCalls.push({
-            name: tc.name, args: tc.args,
-            summary: `${getToolIcon(tc.name)} ${formatToolName(tc.name)}${tc.resultCount !== undefined ? ` (${tc.resultCount})` : ''}`,
-          });
-          const wrap = document.createElement('div');
-          wrap.style.alignSelf = 'flex-start';
-          const chip = document.createElement('button');
-          chip.className = 'chat-tool-chip';
-          chip.textContent = assistantMsg.toolCalls[assistantMsg.toolCalls.length - 1].summary;
-          const detail = document.createElement('div');
-          detail.className = 'chat-tool-detail';
-          detail.textContent = JSON.stringify(tc.args, null, 2);
-          chip.addEventListener('click', () => detail.classList.toggle('open'));
-          wrap.appendChild(chip);
-          wrap.appendChild(detail);
-          container.appendChild(wrap);
-          container.scrollTop = container.scrollHeight;
-          continue;
-        }
-
-        // Text token (OpenAI format: choices[0].delta.content)
-        const content = data.choices?.[0]?.delta?.content;
-        if (content) {
-          if (typingEl.parentNode) typingEl.remove();
-          assistantMsg.content += content;
-          if (!bubbleEl) {
-            bubbleEl = document.createElement('div');
-            bubbleEl.className = 'chat-bubble assistant';
-            container.appendChild(bubbleEl);
-          }
-          bubbleEl.innerHTML = renderMarkdown(assistantMsg.content);
-          container.scrollTop = container.scrollHeight;
-        }
-      }
-    }
-
+    const data = await res.json();
     if (typingEl.parentNode) typingEl.remove();
-    if (assistantMsg.content || assistantMsg.toolCalls.length) {
-      messages.push(assistantMsg);
+
+    // Error from AI service
+    if (data.error) {
+      messages.push({ role: 'error', content: data.error });
+      renderMessages(container);
+    } else {
+      const assistantMsg = { role: 'assistant', content: data.content || '', toolCalls: [] };
+
+      // Tool calls
+      if (data.toolCalls?.length) {
+        assistantMsg.toolCalls = data.toolCalls.map(tc => ({
+          name: tc.name,
+          args: tc.args,
+          summary: `${getToolIcon(tc.name)} ${formatToolName(tc.name)}${tc.resultCount !== undefined ? ` (${tc.resultCount})` : ''}`,
+        }));
+      }
+
+      if (assistantMsg.content || assistantMsg.toolCalls.length) {
+        messages.push(assistantMsg);
+      }
+      renderMessages(container);
     }
 
   } catch (err) {

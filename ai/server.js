@@ -88,72 +88,36 @@ app.post('/ai/chat', async (req, res) => {
     return res.status(400).json({ error: 'messages array required' });
   }
 
-  // SSE headers (OpenAI-compatible format: data: {json}\n\n)
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.flushHeaders();
-  if (res.socket) res.socket.setNoDelay(true);
-
-  const send = (data) => {
-    return new Promise((resolve) => {
-      const ok = res.write(`data: ${JSON.stringify(data)}\n\n`);
-      if (ok) resolve();
-      else res.once('drain', resolve);
-    });
-  };
-
-  const sendDone = () => {
-    return new Promise((resolve) => {
-      const ok = res.write('data: [DONE]\n\n');
-      if (ok) resolve();
-      else res.once('drain', resolve);
-    });
-  };
-
-  let closed = false;
-  req.on('close', () => { closed = true; });
-
   try {
     const provider = providerId ? await getProvider(providerId) : await getDefaultProvider();
     if (!provider) {
-      await send({ type: 'error', error: 'No AI provider configured. Go to AI Settings to add one.' });
-      await sendDone();
-      res.end();
-      return;
+      return res.json({ content: '', toolCalls: [], error: 'No AI provider configured. Go to AI Settings to add one.' });
     }
 
     console.log(`Chat request: provider=${provider.name} model=${model || provider.defaultModel} messages=${messages.length}`);
 
-    await runChat({
+    const toolCalls = [];
+    const content = await runChat({
       messages,
       provider,
       model,
-      onToken: async (token) => {
-        if (!closed) await send({ choices: [{ delta: { content: token } }] });
-      },
+      onToken: null,
       onToolCall: async ({ name, args, result }) => {
-        if (!closed) {
-          const summary = summarizeToolResult(name, result);
-          await send({ tool_call: { name, args, summary, resultCount: Array.isArray(result) ? result.length : undefined } });
-        }
+        toolCalls.push({
+          name,
+          args,
+          summary: summarizeToolResult(name, result),
+          resultCount: Array.isArray(result) ? result.length : undefined,
+        });
       },
     });
 
-    if (!closed) {
-      await sendDone();
-    }
+    console.log(`Chat complete: content=${(content || '').length}chars toolCalls=${toolCalls.length}`);
+    res.json({ content: content || '', toolCalls });
   } catch (err) {
     console.error('Chat error:', err);
-    if (!closed) {
-      await send({ type: 'error', error: err.message || 'An error occurred' });
-      await sendDone();
-    }
+    res.json({ content: '', toolCalls: [], error: err.message || 'An error occurred' });
   }
-
-  console.log('Chat complete, ending response');
-  res.end();
 });
 
 // ---------------------------------------------------------------------------
