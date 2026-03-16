@@ -17,6 +17,8 @@ import { createMeasurePointCalculatorView } from './views/measure-point-calculat
 import { createInstalledBaseView } from './views/installed-base.js';
 import { createConfiguratorView } from './configurator/configurator.js';
 import { initCommandPalette } from './components/command-palette.js';
+import { createChatFAB } from './components/chat-panel.js';
+import { createAiSettingsView } from './views/ai-settings.js';
 
 // ---------------------------------------------------------------------------
 // Theme initialisation (before first paint)
@@ -110,6 +112,9 @@ function showAppShell() {
   wrapper.appendChild(sidebar.element);
   wrapper.appendChild(main);
   appRoot.appendChild(wrapper);
+
+  // Floating AI chat button
+  createChatFAB();
 
   // --- Register routes ---
   registerRoutes(main);
@@ -212,6 +217,11 @@ function registerRoutes(main) {
       templateId: null,
       onBack: () => navigate(`/opportunities/${params.oppId}/quotes`),
     });
+  });
+
+  // AI Settings
+  addRoute('/ai-settings', (container) => {
+    return createAiSettingsView(container);
   });
 }
 

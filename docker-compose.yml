@@ -16,6 +16,16 @@ services:
       timeout: 5s
       retries: 3
 
+  ai:
+    build: ./ai
+    container_name: nixeasy-ai
+    restart: unless-stopped
+    environment:
+      - POCKETBASE_URL=http://pocketbase:8090
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+
   app:
     image: nginx:alpine
     container_name: nixeasy-app
@@ -28,6 +38,8 @@ services:
     depends_on:
       pocketbase:
         condition: service_healthy
+      ai:
+        condition: service_started
 
 volumes:
   pb_data:
