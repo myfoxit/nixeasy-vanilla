@@ -22,6 +22,8 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
   let customerId = null;
   let showHostModal = false;
 
+  let hostsAvailable = true; // false if dev_hosts collection doesn't exist
+
   // Load hosts for the opportunity's customer
   async function loadHosts() {
     if (!oppId) return;
@@ -38,12 +40,19 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
         render();
       }
     } catch (err) {
-      console.warn('Failed to load hosts:', err.message);
+      // Collection doesn't exist — disable host feature silently
+      if (err.message?.includes('Missing') || err.status === 404) {
+        hostsAvailable = false;
+        console.warn('dev_hosts collection not found — host feature disabled');
+      } else {
+        console.warn('Failed to load hosts:', err.message);
+      }
     }
   }
 
   async function createHost(hostname) {
     if (!hostname?.trim()) { showToast('Enter a hostname', 'warning'); return; }
+    if (!hostsAvailable) { showToast('Host collection not available. Create it in PocketBase first.', 'error'); return; }
     try {
       const newHost = await pb.collection('dev_hosts').create({
         hostname: hostname.trim(),
@@ -51,12 +60,68 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
       });
       hosts = [...hosts, newHost];
       selectedHostId = newHost.id;
-      showHostModal = false;
+      closeHostModal();
       showToast(`Host "${hostname}" created`, 'success');
       render();
     } catch (err) {
       showToast('Failed to create host: ' + err.message, 'error');
     }
+  }
+
+  // Modal management — separate from render cycle
+  let _modalOverlay = null;
+
+  function closeHostModal() {
+    showHostModal = false;
+    if (_modalOverlay && _modalOverlay.parentNode) {
+      _modalOverlay.remove();
+      _modalOverlay = null;
+    }
+  }
+
+  function openHostModalUI() {
+    closeHostModal(); // clean up any existing
+    showHostModal = true;
+
+    _modalOverlay = document.createElement('div');
+    _modalOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:100;display:flex;align-items:center;justify-content:center;';
+    _modalOverlay.addEventListener('click', e => { if (e.target === _modalOverlay) { closeHostModal(); } });
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--surface);border-radius:8px;padding:20px;width:340px;box-shadow:0 10px 40px rgba(0,0,0,0.2);';
+
+    const modalTitle = document.createElement('h4');
+    modalTitle.style.cssText = 'margin:0 0 12px;font-size:0.95rem;';
+    modalTitle.textContent = 'Create New Host';
+    modal.appendChild(modalTitle);
+
+    const hostInput = document.createElement('input');
+    hostInput.type = 'text';
+    hostInput.placeholder = 'Hostname (e.g. srv-prod-01)';
+    hostInput.style.cssText = 'width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;margin-bottom:12px;background:var(--surface);color:var(--text-main);box-sizing:border-box;';
+    modal.appendChild(hostInput);
+
+    const modalActions = document.createElement('div');
+    modalActions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-secondary btn-sm';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', closeHostModal);
+    modalActions.appendChild(cancelBtn);
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-primary btn-sm';
+    saveBtn.textContent = 'Create';
+    saveBtn.addEventListener('click', () => createHost(hostInput.value));
+    modalActions.appendChild(saveBtn);
+
+    hostInput.addEventListener('keydown', e => { if (e.key === 'Enter') createHost(hostInput.value); });
+
+    modal.appendChild(modalActions);
+    _modalOverlay.appendChild(modal);
+    document.body.appendChild(_modalOverlay);
+    requestAnimationFrame(() => hostInput.focus());
   }
 
   // Start loading hosts
@@ -459,11 +524,6 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
   }
 
   function render() {
-    // Clean up any modal overlay
-    if (el._modalOverlay && el._modalOverlay.parentNode) {
-      el._modalOverlay.remove();
-      el._modalOverlay = null;
-    }
     el.innerHTML = '';
 
     // Left: Catalog
@@ -521,7 +581,7 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
     rightPanel.appendChild(totalsEl);
 
     // Host selector bar
-    if (hosts.length > 0 || oppId) {
+    if (hostsAvailable && oppId) {
       const hostBar = document.createElement('div');
       hostBar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg);';
 
@@ -549,58 +609,10 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
       addHostBtn.textContent = '+ Add Host';
       addHostBtn.addEventListener('mouseenter', () => { addHostBtn.style.borderColor = 'var(--primary)'; addHostBtn.style.color = 'var(--primary)'; });
       addHostBtn.addEventListener('mouseleave', () => { addHostBtn.style.borderColor = 'var(--border)'; addHostBtn.style.color = 'var(--text-secondary)'; });
-      addHostBtn.addEventListener('click', () => { showHostModal = true; render(); });
+      addHostBtn.addEventListener('click', openHostModalUI);
       hostBar.appendChild(addHostBtn);
 
       rightPanel.appendChild(hostBar);
-    }
-
-    // Host creation modal (inline)
-    if (showHostModal) {
-      const modalOverlay = document.createElement('div');
-      modalOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:100;display:flex;align-items:center;justify-content:center;';
-      modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) { showHostModal = false; render(); } });
-
-      const modal = document.createElement('div');
-      modal.style.cssText = 'background:var(--surface);border-radius:8px;padding:20px;width:340px;box-shadow:0 10px 40px rgba(0,0,0,0.2);';
-
-      const modalTitle = document.createElement('h4');
-      modalTitle.style.cssText = 'margin:0 0 12px;font-size:0.95rem;';
-      modalTitle.textContent = 'Create New Host';
-      modal.appendChild(modalTitle);
-
-      const hostInput = document.createElement('input');
-      hostInput.type = 'text';
-      hostInput.placeholder = 'Hostname (e.g. srv-prod-01)';
-      hostInput.style.cssText = 'width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;margin-bottom:12px;background:var(--surface);color:var(--text-main);';
-      modal.appendChild(hostInput);
-
-      const modalActions = document.createElement('div');
-      modalActions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
-
-      const cancelBtn = document.createElement('button');
-      cancelBtn.className = 'btn btn-secondary btn-sm';
-      cancelBtn.textContent = 'Cancel';
-      cancelBtn.addEventListener('click', () => { showHostModal = false; render(); });
-      modalActions.appendChild(cancelBtn);
-
-      const saveBtn = document.createElement('button');
-      saveBtn.className = 'btn btn-primary btn-sm';
-      saveBtn.textContent = 'Create';
-      saveBtn.addEventListener('click', () => createHost(hostInput.value));
-      modalActions.appendChild(saveBtn);
-
-      hostInput.addEventListener('keydown', e => { if (e.key === 'Enter') createHost(hostInput.value); });
-
-      modal.appendChild(modalActions);
-      modalOverlay.appendChild(modal);
-      document.body.appendChild(modalOverlay);
-
-      // Auto-focus
-      requestAnimationFrame(() => hostInput.focus());
-
-      // Store ref for cleanup
-      el._modalOverlay = modalOverlay;
     }
 
     // Items header — show host name if selected
