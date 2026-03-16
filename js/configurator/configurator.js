@@ -370,74 +370,14 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     headerRight.style.cssText = 'align-items:center;';
 
     if (!isTemplateMode) {
-      // Load Template
-      const loadTrigger = document.createElement('button');
-      loadTrigger.className = 'btn btn-secondary btn-sm';
-      loadTrigger.textContent = 'Load Template';
-      loadPopoverInstance = createPopover({ trigger: loadTrigger, content: () => buildLoadTemplateContent(), align: 'right', width: 320 });
-      headerRight.appendChild(loadPopoverInstance.element);
-
-      // Save as Template
-      const saveTplTrigger = document.createElement('button');
-      saveTplTrigger.className = 'btn btn-secondary btn-sm';
-      saveTplTrigger.textContent = 'Save as Template';
-      savePopoverInstance = createPopover({ trigger: saveTplTrigger, content: () => buildSaveTemplateContent(), align: 'right', width: 320 });
-      headerRight.appendChild(savePopoverInstance.element);
-
-      // Duplicate
-      if (qId) {
-        const dupBtn = document.createElement('button');
-        dupBtn.className = 'btn btn-secondary btn-sm';
-        dupBtn.textContent = 'Duplicate';
-        dupBtn.addEventListener('click', async () => {
-          try {
-            dupBtn.disabled = true;
-            await save();
-            const orig = await pb.collection('quotes').getOne(qId);
-            const newName = (orig.name || quoteName || 'Untitled') + ' (copy)';
-            const body = { opportunity: oppId, quote_data: orig.quote_data };
-            try { body.name = newName; } catch (_) {}
-            if (!isSuperUser() && currentUser?.id) body.created_by = currentUser.id;
-            const dup = await pb.collection('quotes').create(body);
-            showToast(`Duplicated as "${newName}"`, 'success');
-            navigate(`/opportunities/${oppId}/quotes/${dup.id}`);
-          } catch (err) {
-            showToast('Failed: ' + (err.message || 'Unknown'), 'error');
-            dupBtn.disabled = false;
-          }
-        });
-        headerRight.appendChild(dupBtn);
-      }
-
-      // Export
+      // Export (visible button)
       const exportTrigger = document.createElement('button');
       exportTrigger.className = 'btn btn-secondary btn-sm';
       exportTrigger.textContent = 'Export';
       exportPopoverInstance = createPopover({ trigger: exportTrigger, content: () => buildExportContent(), align: 'right', width: 280 });
       headerRight.appendChild(exportPopoverInstance.element);
 
-      // History
-      const historyBtn = document.createElement('button');
-      historyBtn.className = 'btn btn-secondary btn-sm';
-      historyBtn.title = 'View change history';
-      historyBtn.innerHTML =
-        '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:15px;height:15px;display:inline-block;vertical-align:middle;margin-right:4px;">' +
-        '<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>History';
-      historyBtn.addEventListener('click', () => {
-        if (!qId) { showToast('Save the quote first to view history', 'info'); return; }
-        if (changelogPanelInstance) {
-          changelogPanelInstance.destroy();
-          changelogPanelInstance = null;
-          return;
-        }
-        changelogPanelInstance = createChangelogPanel({
-          quoteId: qId,
-          onClose: () => { changelogPanelInstance?.destroy(); changelogPanelInstance = null; },
-        });
-      });
-      headerRight.appendChild(historyBtn);
-
-      // Save
+      // Save (visible button)
       const saveBtn = document.createElement('button');
       saveBtn.className = 'btn btn-primary btn-sm';
       saveBtn.textContent = 'Save';
@@ -445,6 +385,102 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
         try { await save(); showToast('Saved', 'success'); } catch (err) { showToast('Failed to save', 'error'); }
       });
       headerRight.appendChild(saveBtn);
+
+      // Hidden anchors for Load/Save Template popovers (opened from more menu)
+      const loadAnchor = document.createElement('span');
+      loadAnchor.style.cssText = 'position:relative;display:inline-block;width:0;overflow:visible;';
+      loadPopoverInstance = createPopover({ trigger: loadAnchor, content: () => buildLoadTemplateContent(), align: 'right', width: 320 });
+      headerRight.appendChild(loadPopoverInstance.element);
+
+      const saveAnchor = document.createElement('span');
+      saveAnchor.style.cssText = 'position:relative;display:inline-block;width:0;overflow:visible;';
+      savePopoverInstance = createPopover({ trigger: saveAnchor, content: () => buildSaveTemplateContent(), align: 'right', width: 320 });
+      headerRight.appendChild(savePopoverInstance.element);
+
+      // More menu (⋯ ghost button) — contains Load Template, Save as Template, Duplicate, History
+      const moreTrigger = document.createElement('button');
+      moreTrigger.className = 'btn btn-sm';
+      moreTrigger.style.cssText = 'background:transparent;border:none;font-size:1.2rem;padding:4px 8px;cursor:pointer;color:var(--text-secondary);line-height:1;';
+      moreTrigger.innerHTML = '⋯';
+      moreTrigger.title = 'More actions';
+
+      const morePopover = createPopover({
+        trigger: moreTrigger,
+        content: () => {
+          const menu = document.createElement('div');
+          menu.style.padding = '4px';
+
+          const menuItem = (label, icon, onClick) => {
+            const btn = document.createElement('button');
+            btn.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border:none;background:transparent;cursor:pointer;border-radius:6px;font-size:0.85rem;text-align:left;color:var(--text-main);transition:background 0.1s;white-space:nowrap;';
+            btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--hover-bg, #f3f4f6)'; });
+            btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
+            btn.innerHTML = icon + ' ' + label;
+            btn.addEventListener('click', () => { morePopover.close(); onClick(); });
+            return btn;
+          };
+
+          // Load Template
+          menu.appendChild(menuItem(
+            'Load Template',
+            '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0;"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>',
+            () => { loadPopoverInstance.open(); }
+          ));
+
+          // Save as Template
+          menu.appendChild(menuItem(
+            'Save as Template',
+            '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0;"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/></svg>',
+            () => { savePopoverInstance.open(); }
+          ));
+
+          // Duplicate (only if quote exists)
+          if (qId) {
+            menu.appendChild(menuItem(
+              'Duplicate',
+              '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0;"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75"/></svg>',
+              async () => {
+                try {
+                  await save();
+                  const orig = await pb.collection('quotes').getOne(qId);
+                  const newName = (orig.name || quoteName || 'Untitled') + ' (copy)';
+                  const body = { opportunity: oppId, quote_data: orig.quote_data };
+                  try { body.name = newName; } catch (_) {}
+                  if (!isSuperUser() && currentUser?.id) body.created_by = currentUser.id;
+                  const dup = await pb.collection('quotes').create(body);
+                  showToast(`Duplicated as "${newName}"`, 'success');
+                  navigate(`/opportunities/${oppId}/quotes/${dup.id}`);
+                } catch (err) {
+                  showToast('Failed: ' + (err.message || 'Unknown'), 'error');
+                }
+              }
+            ));
+          }
+
+          // History
+          menu.appendChild(menuItem(
+            'History',
+            '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            () => {
+              if (!qId) { showToast('Save the quote first to view history', 'info'); return; }
+              if (changelogPanelInstance) {
+                changelogPanelInstance.destroy();
+                changelogPanelInstance = null;
+                return;
+              }
+              changelogPanelInstance = createChangelogPanel({
+                quoteId: qId,
+                onClose: () => { changelogPanelInstance?.destroy(); changelogPanelInstance = null; },
+              });
+            }
+          ));
+
+          return menu;
+        },
+        align: 'right',
+        width: 200
+      });
+      headerRight.appendChild(morePopover.element);
     } else {
       const saveTplBtn = document.createElement('button');
       saveTplBtn.className = 'btn btn-primary btn-sm';
