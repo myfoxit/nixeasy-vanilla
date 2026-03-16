@@ -96,7 +96,7 @@ async function runOpenAIChat({ messages, provider, model, onToken, onToolCall })
         // Text content
         if (delta.content) {
           assistantContent += delta.content;
-          onToken?.(delta.content);
+          if (onToken) await onToken(delta.content);
         }
 
         // Tool calls
@@ -147,10 +147,10 @@ async function runOpenAIChat({ messages, provider, model, onToken, onToolCall })
       try {
         const args = JSON.parse(tc.arguments || '{}');
         result = await executeTool(tc.name, args);
-        onToolCall?.({ name: tc.name, args, result });
+        if (onToolCall) await onToolCall({ name: tc.name, args, result });
       } catch (err) {
         result = { error: err.message };
-        onToolCall?.({ name: tc.name, args: {}, result });
+        if (onToolCall) await onToolCall({ name: tc.name, args: {}, result });
       }
       chatMessages.push({
         role: 'tool',
@@ -200,7 +200,7 @@ async function runAnthropicChat({ messages, provider, model, onToken, onToolCall
         if (event.delta.type === 'text_delta') {
           assistantText += event.delta.text;
           if (contentBlocks.length) contentBlocks[contentBlocks.length - 1].text += event.delta.text;
-          onToken?.(event.delta.text);
+          if (onToken) await onToken(event.delta.text);
         } else if (event.delta.type === 'input_json_delta') {
           toolInputJson += event.delta.partial_json;
         }
@@ -235,10 +235,10 @@ async function runAnthropicChat({ messages, provider, model, onToken, onToolCall
       let result;
       try {
         result = await executeTool(tu.name, tu.input);
-        onToolCall?.({ name: tu.name, args: tu.input, result });
+        if (onToolCall) await onToolCall({ name: tu.name, args: tu.input, result });
       } catch (err) {
         result = { error: err.message };
-        onToolCall?.({ name: tu.name, args: tu.input, result });
+        if (onToolCall) await onToolCall({ name: tu.name, args: tu.input, result });
       }
       toolResults.push({
         type: 'tool_result',

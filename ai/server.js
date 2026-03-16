@@ -79,16 +79,20 @@ app.post('/ai/chat', async (req, res) => {
   }
 
   // SSE headers
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'X-Accel-Buffering': 'no',
-  });
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  // Disable Nagle's algorithm for immediate writes
+  if (res.socket) res.socket.setNoDelay(true);
 
   const send = (event, data) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    if (typeof res.flush === 'function') res.flush();
+    return new Promise((resolve) => {
+      const ok = res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      if (ok) resolve();
+      else res.once('drain', resolve);
+    });
   };
 
   let closed = false;
@@ -110,19 +114,19 @@ app.post('/ai/chat', async (req, res) => {
       messages,
       provider,
       model,
-      onToken: (token) => {
-        if (!closed) send('token', { token });
+      onToken: async (token) => {
+        if (!closed) await send('token', { token });
       },
-      onToolCall: ({ name, args, result }) => {
+      onToolCall: async ({ name, args, result }) => {
         if (!closed) {
           const summary = summarizeToolResult(name, result);
-          send('tool', { name, args, summary, resultCount: Array.isArray(result) ? result.length : undefined });
+          await send('tool', { name, args, summary, resultCount: Array.isArray(result) ? result.length : undefined });
         }
       },
     });
 
     if (!closed) {
-      send('done', { fullText: result });
+      await send('done', { fullText: result });
     }
   } catch (err) {
     console.error('Chat error:', err);
