@@ -8,6 +8,7 @@ import { navigate } from '../router.js';
 import { setRouteState } from '../app.js';
 import { createDataTable } from '../components/data-table.js';
 import { showConfirmModal } from '../components/modal.js';
+import { createRowActions } from '../components/row-actions.js';
 import { showToast } from '../components/toast.js';
 
 /**
@@ -106,31 +107,12 @@ export function createCustomersView(container) {
       {
         header: 'Actions',
         style: { textAlign: 'right' },
-        render: (c) => {
-          const wrap = document.createElement('div');
-          wrap.style.cssText = 'display:flex;justify-content:flex-end;gap:0.5rem;';
-
-          const editBtn = document.createElement('button');
-          editBtn.className = 'btn btn-secondary btn-sm';
-          editBtn.textContent = 'Edit';
-          editBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openModal(c);
-          });
-
-          const delBtn = document.createElement('button');
-          delBtn.className = 'btn btn-ghost btn-sm';
-          delBtn.style.color = 'var(--danger)';
-          delBtn.textContent = 'Del';
-          delBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            handleDelete(c.id, c.name);
-          });
-
-          wrap.appendChild(editBtn);
-          wrap.appendChild(delBtn);
-          return wrap;
-        },
+        render: (c) => createRowActions({
+          onEdit: () => openModal(c),
+          more: [
+            { label: 'Delete', onClick: () => handleDelete(c.id, c.name), danger: true },
+          ],
+        }),
       },
     ];
   }

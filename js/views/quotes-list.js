@@ -10,6 +10,7 @@ import { createAsyncSelect } from '../components/async-select.js';
 import { showConfirmModal } from '../components/modal.js';
 import { showToast } from '../components/toast.js';
 import { currency } from '../utils/format.js';
+import { createRowActions } from '../components/row-actions.js';
 
 /**
  * Create the all-quotes list view.
@@ -165,44 +166,18 @@ export function createQuotesListView(container, { oppId } = {}) {
       },
       {
         header: 'Actions',
-        style: { width: 170, textAlign: 'right' },
-        render: (q) => {
-          const wrap = document.createElement('div');
-          wrap.style.cssText = 'display:flex;justify-content:flex-end;gap:0.5rem;';
-
-          const editBtn = document.createElement('button');
-          editBtn.className = 'btn btn-secondary btn-sm';
-          editBtn.textContent = 'Edit';
-          editBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
+        style: { width: 130, textAlign: 'right' },
+        render: (q) => createRowActions({
+          onEdit: () => {
             if (q.expand?.opportunity?.id) {
               navigate(`/opportunities/${q.expand.opportunity.id}/quotes/${q.id}`);
             }
-          });
-
-          const dupBtn = document.createElement('button');
-          dupBtn.className = 'btn btn-secondary btn-sm';
-          dupBtn.textContent = 'Dup';
-          dupBtn.title = 'Duplicate quote';
-          dupBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            handleDuplicate(q);
-          });
-
-          const delBtn = document.createElement('button');
-          delBtn.className = 'btn btn-ghost btn-sm';
-          delBtn.style.color = 'var(--danger)';
-          delBtn.textContent = 'Del';
-          delBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            handleDelete(q);
-          });
-
-          wrap.appendChild(editBtn);
-          wrap.appendChild(dupBtn);
-          wrap.appendChild(delBtn);
-          return wrap;
-        },
+          },
+          more: [
+            { label: 'Duplicate', onClick: () => handleDuplicate(q) },
+            { label: 'Delete', onClick: () => handleDelete(q), danger: true },
+          ],
+        }),
       },
     ];
   }

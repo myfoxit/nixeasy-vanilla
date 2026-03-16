@@ -7,6 +7,7 @@ import { navigate } from '../router.js';
 import { createDataTable } from '../components/data-table.js';
 import { showConfirmModal } from '../components/modal.js';
 import { showToast } from '../components/toast.js';
+import { createRowActions } from '../components/row-actions.js';
 
 /**
  * Create the quote templates list view.
@@ -67,31 +68,12 @@ export function createTemplatesView(container) {
       {
         header: 'Actions',
         style: { width: 120, textAlign: 'right' },
-        render: (t) => {
-          const wrap = document.createElement('div');
-          wrap.style.cssText = 'display:flex;justify-content:flex-end;gap:0.5rem;';
-
-          const editBtn = document.createElement('button');
-          editBtn.className = 'btn btn-secondary btn-sm';
-          editBtn.textContent = 'Edit';
-          editBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            navigate(`/templates/${t.id}`);
-          });
-
-          const delBtn = document.createElement('button');
-          delBtn.className = 'btn btn-ghost btn-sm';
-          delBtn.style.color = 'var(--danger)';
-          delBtn.textContent = 'Del';
-          delBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            handleDelete(t.id, t.name);
-          });
-
-          wrap.appendChild(editBtn);
-          wrap.appendChild(delBtn);
-          return wrap;
-        },
+        render: (t) => createRowActions({
+          onEdit: () => navigate(`/templates/${t.id}`),
+          more: [
+            { label: 'Delete', onClick: () => handleDelete(t.id, t.name), danger: true },
+          ],
+        }),
       },
     ];
   }

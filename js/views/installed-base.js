@@ -11,6 +11,7 @@ import { createAsyncSelect } from '../components/async-select.js';
 import { showConfirmModal } from '../components/modal.js';
 import { showToast } from '../components/toast.js';
 import { formatDate } from '../utils/format.js';
+import { createRowActions } from '../components/row-actions.js';
 
 const PAGE_SIZE = 15;
 
@@ -276,30 +277,12 @@ export function createInstalledBaseView(container) {
         header: 'Actions',
         align: 'right',
         style: { textAlign: 'right' },
-        render: (s) => {
-          const wrapper = document.createElement('div');
-          wrapper.className = 'flex gap-2 justify-end';
-
-          const editBtn = document.createElement('button');
-          editBtn.className = 'btn btn-secondary btn-sm';
-          editBtn.textContent = 'Edit';
-          editBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openSiteModal(s);
-          });
-
-          const delBtn = document.createElement('button');
-          delBtn.className = 'btn btn-danger btn-sm';
-          delBtn.textContent = 'Delete';
-          delBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            handleDeleteSite(s);
-          });
-
-          wrapper.appendChild(editBtn);
-          wrapper.appendChild(delBtn);
-          return wrapper;
-        },
+        render: (s) => createRowActions({
+          onEdit: () => openSiteModal(s),
+          more: [
+            { label: 'Delete', onClick: () => handleDeleteSite(s), danger: true },
+          ],
+        }),
       },
     ];
   }
@@ -641,31 +624,12 @@ export function createInstalledBaseView(container) {
         header: 'Actions',
         align: 'right',
         style: { textAlign: 'right' },
-        render: (ib) => {
-          const wrapper = document.createElement('div');
-          wrapper.className = 'flex gap-2 justify-end';
-
-          const editBtn = document.createElement('button');
-          editBtn.className = 'btn btn-secondary btn-sm';
-          editBtn.textContent = 'Edit';
-          editBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openIbModal(ib);
-          });
-
-          const delBtn = document.createElement('button');
-          delBtn.className = 'btn btn-ghost btn-sm';
-          delBtn.style.color = 'var(--danger)';
-          delBtn.textContent = 'Del';
-          delBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            handleDeleteIb(ib);
-          });
-
-          wrapper.appendChild(editBtn);
-          wrapper.appendChild(delBtn);
-          return wrapper;
-        },
+        render: (ib) => createRowActions({
+          onEdit: () => openIbModal(ib),
+          more: [
+            { label: 'Delete', onClick: () => handleDeleteIb(ib), danger: true },
+          ],
+        }),
       },
     ];
   }

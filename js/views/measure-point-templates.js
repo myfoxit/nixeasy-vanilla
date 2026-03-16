@@ -6,6 +6,7 @@ import { createDataTable } from '../components/data-table.js';
 import { createSelect } from '../components/select.js';
 import { showConfirmModal } from '../components/modal.js';
 import { showToast } from '../components/toast.js';
+import { createRowActions } from '../components/row-actions.js';
 
 const TYPE_OPTIONS = [
   { value: 'APPLICATION', label: 'APPLICATION' },
@@ -173,32 +174,12 @@ export function createMeasurePointTemplatesView(container) {
         header: 'Actions',
         style: { textAlign: 'right' },
         align: 'right',
-        render: (t) => {
-          const wrapper = document.createElement('div');
-          wrapper.style.cssText = 'display:flex;justify-content:flex-end;gap:0.5rem;';
-
-          const editBtn = document.createElement('button');
-          editBtn.className = 'btn btn-secondary btn-sm';
-          editBtn.textContent = 'Edit';
-          editBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            editItem = t;
-            openModal();
-          });
-
-          const delBtn = document.createElement('button');
-          delBtn.className = 'btn btn-ghost btn-sm';
-          delBtn.style.color = 'var(--danger)';
-          delBtn.textContent = 'Del';
-          delBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            handleDelete(t);
-          });
-
-          wrapper.appendChild(editBtn);
-          wrapper.appendChild(delBtn);
-          return wrapper;
-        },
+        render: (t) => createRowActions({
+          onEdit: () => { editItem = t; openModal(); },
+          more: [
+            { label: 'Delete', onClick: () => handleDelete(t), danger: true },
+          ],
+        }),
       },
     ];
   }
