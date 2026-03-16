@@ -2,6 +2,7 @@
  * Chat Panel - Slide-in panel for AI chat assistant.
  * Streams responses via SSE, renders tool calls as collapsible chips.
  */
+console.log('[chat-panel] Module loaded');
 
 // ---------------------------------------------------------------------------
 // State
