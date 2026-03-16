@@ -339,7 +339,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
 
     // Top row: back + title + name + actions
     const headerTop = document.createElement('div');
-    headerTop.style.cssText = 'display:flex;justify-content:space-between;align-items:center;width:100%;';
+    headerTop.style.cssText = 'display:flex;align-items:center;width:100%;';
 
     const headerLeft = document.createElement('div');
     headerLeft.style.cssText = 'display:flex;align-items:center;gap:12px;';
@@ -364,9 +364,9 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
 
     headerTop.appendChild(headerLeft);
 
-    // Right actions (right-aligned via space-between on parent)
+    // Actions (pushed to the right via margin-left:auto)
     const headerRight = document.createElement('div');
-    headerRight.style.cssText = 'display:flex;gap:8px;align-items:center;';
+    headerRight.style.cssText = 'display:flex;gap:8px;align-items:center;margin-left:auto;';
 
     if (!isTemplateMode) {
       // Export (normal secondary button)
