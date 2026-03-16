@@ -43,6 +43,10 @@ export function createQuotesListView(container, { oppId } = {}) {
   let custAsyncSelect = null;
   let destroyed = false;
 
+  // Opportunity context (loaded when oppId is set)
+  let opportunityTitle = '';
+  let customerName = '';
+
   // --- Action button ---
   const newBtn = document.createElement('button');
   newBtn.className = 'btn btn-primary';
@@ -205,8 +209,8 @@ export function createQuotesListView(container, { oppId } = {}) {
 
   // --- DataTable ---
   const dt = createDataTable({
-    title: 'All Quotes',
-    subtitle: 'View and manage quotes across all opportunities',
+    title: oppId ? 'Quotes' : 'All Quotes',
+    subtitle: oppId ? 'Loading…' : 'View and manage quotes across all opportunities',
     action: newBtn,
     columns: getColumns(),
     data: [],
@@ -695,6 +699,18 @@ export function createQuotesListView(container, { oppId } = {}) {
     modalBackdrop = null;
     modalPrimaryBtn = null;
     modalBackBtn = null;
+  }
+
+  // Load opportunity context for filtered view
+  if (oppId) {
+    pb.collection('opportunities').getOne(oppId, { expand: 'customer' }).then(opp => {
+      opportunityTitle = opp.title || `#${opp.opportunity || ''}`;
+      customerName = opp.expand?.customer?.name || '';
+      const subtitle = customerName
+        ? `Quotes for "${opportunityTitle}" — ${customerName}`
+        : `Quotes for "${opportunityTitle}"`;
+      dt.update({ title: `Quotes — ${opportunityTitle}`, subtitle });
+    }).catch(() => {});
   }
 
   // Initial load
