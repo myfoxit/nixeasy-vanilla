@@ -55,6 +55,9 @@ export function createDocumentEditorView(container, opts = {}) {
   const opportunityId = qp.get('opportunityId');
   const quoteId = qp.get('quoteId');
 
+  // Generate mode = opened from configurator with quote data (not template editing)
+  const isGenerateMode = !!(opportunityId && quoteId);
+
   // State
   let docName = 'Untitled Document';
   let pageSettings = { margins: { top: 20, right: 20, bottom: 20, left: 20 }, orientation: 'portrait', headerHtml: '', footerHtml: '' };
@@ -83,7 +86,13 @@ export function createDocumentEditorView(container, opts = {}) {
   backBtn.className = 'btn btn-secondary';
   backBtn.style.cssText = 'padding:6px 10px;';
   backBtn.innerHTML = '&larr;';
-  backBtn.addEventListener('click', () => navigate('/documents'));
+  backBtn.addEventListener('click', () => {
+    if (isGenerateMode && opportunityId && quoteId) {
+      navigate(`/opportunities/${opportunityId}/quotes/${quoteId}`);
+    } else {
+      navigate('/documents');
+    }
+  });
   header.appendChild(backBtn);
 
   const nameInput = document.createElement('input');
@@ -91,112 +100,70 @@ export function createDocumentEditorView(container, opts = {}) {
   nameInput.placeholder = 'Document name...';
   nameInput.value = docName;
   nameInput.addEventListener('blur', () => { docName = nameInput.value.trim() || 'Untitled Document'; });
+  if (isGenerateMode) nameInput.readOnly = true;
   header.appendChild(nameInput);
 
   const headerActions = document.createElement('div');
   headerActions.style.cssText = 'display:flex;align-items:center;gap:8px;margin-left:auto;';
 
-  // Insert Variable button (always visible in header)
-  const headerVarWrap = document.createElement('div');
-  headerVarWrap.style.cssText = 'position:relative;';
-  const headerVarBtn = document.createElement('button');
-  headerVarBtn.className = 'btn btn-secondary btn-sm';
-  headerVarBtn.innerHTML = '&#123; x &#125; Insert Variable';
-  headerVarBtn.addEventListener('click', () => toggleHeaderVarDropdown());
-  headerVarWrap.appendChild(headerVarBtn);
-
-  const headerVarDropdown = document.createElement('div');
-  headerVarDropdown.style.cssText = 'display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:60;width:280px;max-height:360px;overflow-y:auto;padding:8px;';
-  headerVarWrap.appendChild(headerVarDropdown);
-  headerActions.appendChild(headerVarWrap);
-
-  function toggleHeaderVarDropdown() {
-    if (headerVarDropdown.style.display === 'none') {
-      headerVarDropdown.innerHTML = '';
-      const groups = getAvailableVariables();
-      groups.forEach(group => {
-        const groupLabel = document.createElement('div');
-        groupLabel.style.cssText = 'font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-secondary);padding:6px 8px 2px;';
-        groupLabel.textContent = group.group;
-        headerVarDropdown.appendChild(groupLabel);
-        group.vars.forEach(v => {
-          const item = document.createElement('button');
-          item.style.cssText = 'display:block;width:100%;text-align:left;padding:6px 8px;border:none;background:transparent;cursor:pointer;border-radius:4px;font-size:0.8rem;color:var(--text-main);';
-          item.textContent = v.label;
-          item.title = `{{${v.key}}}`;
-          item.addEventListener('mouseenter', () => { item.style.background = 'var(--bg)'; });
-          item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
-          item.addEventListener('click', () => {
-            insertVariable(v.key, v.label);
-            headerVarDropdown.style.display = 'none';
+  if (!isGenerateMode) {
+    // TEMPLATE EDITOR MODE: Insert Variable button
+    const headerVarWrap = document.createElement('div');
+    headerVarWrap.style.cssText = 'position:relative;';
+    const headerVarBtn = document.createElement('button');
+    headerVarBtn.className = 'btn btn-secondary btn-sm';
+    headerVarBtn.innerHTML = '&#123; x &#125; Insert Variable';
+    headerVarBtn.addEventListener('click', () => {
+      if (headerVarDropdown.style.display === 'none') {
+        headerVarDropdown.innerHTML = '';
+        const groups = getAvailableVariables();
+        groups.forEach(group => {
+          const groupLabel = document.createElement('div');
+          groupLabel.style.cssText = 'font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-secondary);padding:6px 8px 2px;';
+          groupLabel.textContent = group.group;
+          headerVarDropdown.appendChild(groupLabel);
+          group.vars.forEach(v => {
+            const item = document.createElement('button');
+            item.style.cssText = 'display:block;width:100%;text-align:left;padding:6px 8px;border:none;background:transparent;cursor:pointer;border-radius:4px;font-size:0.8rem;color:var(--text-main);';
+            item.textContent = v.label;
+            item.title = `{{${v.key}}}`;
+            item.addEventListener('mouseenter', () => { item.style.background = 'var(--bg)'; });
+            item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
+            item.addEventListener('click', () => {
+              insertVariable(v.key, v.label);
+              headerVarDropdown.style.display = 'none';
+            });
+            headerVarDropdown.appendChild(item);
           });
-          headerVarDropdown.appendChild(item);
         });
-      });
-      headerVarDropdown.style.display = 'block';
-    } else {
-      headerVarDropdown.style.display = 'none';
-    }
+        headerVarDropdown.style.display = 'block';
+      } else {
+        headerVarDropdown.style.display = 'none';
+      }
+    });
+    headerVarWrap.appendChild(headerVarBtn);
+
+    const headerVarDropdown = document.createElement('div');
+    headerVarDropdown.style.cssText = 'display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:60;width:280px;max-height:360px;overflow-y:auto;padding:8px;';
+    headerVarWrap.appendChild(headerVarDropdown);
+    headerActions.appendChild(headerVarWrap);
+
+    document.addEventListener('click', (e) => {
+      if (!headerVarWrap.contains(e.target)) headerVarDropdown.style.display = 'none';
+    });
+
+    // Save button (template mode only)
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-secondary btn-sm';
+    saveBtn.textContent = 'Save';
+    saveBtn.addEventListener('click', handleSave);
+    headerActions.appendChild(saveBtn);
   }
 
-  // Close header var dropdown on outside click
-  document.addEventListener('click', (e) => {
-    if (!headerVarWrap.contains(e.target)) {
-      headerVarDropdown.style.display = 'none';
-    }
-  });
-
-  // Preview toggle — shows resolved data instead of variable chips
-  let previewMode = false;
-  const previewBtn = document.createElement('button');
-  previewBtn.className = 'btn btn-secondary btn-sm';
-  previewBtn.textContent = '👁 Preview Data';
-  previewBtn.title = 'Toggle between variable chips and resolved data';
-  previewBtn.addEventListener('click', togglePreview);
-  headerActions.appendChild(previewBtn);
-
-  function togglePreview() {
-    if (!quillInstance) return;
-    previewMode = !previewMode;
-    previewBtn.textContent = previewMode ? '✏️ Edit Mode' : '👁 Preview Data';
-
-    const chips = quillInstance.root.querySelectorAll('.ql-variable');
-    if (previewMode) {
-      // Replace chips with resolved text (visual only — store originals)
-      chips.forEach(chip => {
-        const key = chip.getAttribute('data-variable');
-        const resolved = variableMap[key] || `{{${key}}}`;
-        chip.setAttribute('data-original-label', chip.textContent);
-        chip.textContent = resolved;
-        chip.style.background = '#d1fae5';
-        chip.style.color = '#065f46';
-      });
-      quillInstance.disable();
-    } else {
-      // Restore chips
-      const allChips = quillInstance.root.querySelectorAll('.ql-variable');
-      allChips.forEach(chip => {
-        const original = chip.getAttribute('data-original-label');
-        if (original) {
-          chip.textContent = original;
-          chip.removeAttribute('data-original-label');
-        }
-        chip.style.background = '';
-        chip.style.color = '';
-      });
-      quillInstance.enable();
-    }
-  }
-
-  const saveBtn = document.createElement('button');
-  saveBtn.className = 'btn btn-secondary btn-sm';
-  saveBtn.textContent = 'Save';
-  saveBtn.addEventListener('click', handleSave);
-  headerActions.appendChild(saveBtn);
-
+  // Export PDF button (both modes, but primary in generate mode)
   const exportBtn = document.createElement('button');
-  exportBtn.className = 'btn btn-primary btn-sm';
-  exportBtn.textContent = 'Export PDF';
+  exportBtn.className = isGenerateMode ? 'btn btn-primary' : 'btn btn-primary btn-sm';
+  exportBtn.textContent = isGenerateMode ? '📄 Export PDF' : 'Export PDF';
   exportBtn.addEventListener('click', handleExport);
   headerActions.appendChild(exportBtn);
 
@@ -218,6 +185,7 @@ export function createDocumentEditorView(container, opts = {}) {
   // =========================================================================
   const editorPane = document.createElement('div');
   editorPane.className = 'fluid-editor-pane';
+  if (isGenerateMode) editorPane.style.flex = '1';
 
   const pageWrap = document.createElement('div');
   pageWrap.className = 'fluid-page-wrap';
@@ -383,6 +351,7 @@ export function createDocumentEditorView(container, opts = {}) {
   // =========================================================================
   const sidebar = document.createElement('div');
   sidebar.className = 'fluid-editor-sidebar';
+  if (isGenerateMode) sidebar.style.display = 'none';
 
   // Tab headers
   const tabBar = document.createElement('div');
@@ -846,7 +815,7 @@ export function createDocumentEditorView(container, opts = {}) {
         if (customer) parts.push(`Customer: ${customer.name}`);
         if (opportunity) parts.push(`Opportunity: ${opportunity.title}`);
         if (quote) parts.push(`Quote: ${quote.name || quote.id?.substring(0, 8)}`);
-        contextBanner.textContent = 'Generating document for: ' + parts.join(' \u00B7 ');
+        contextBanner.textContent = (isGenerateMode ? '📄 Generating document for: ' : 'Context: ') + parts.join(' \u00B7 ');
         contextBanner.style.display = 'block';
       }
 
@@ -866,11 +835,27 @@ export function createDocumentEditorView(container, opts = {}) {
           // Load content into Quill
           const containers = Array.isArray(tpl.containers) ? tpl.containers : [];
           if (containers.length > 0 && quillInstance) {
-            // Combine all container HTML
-            const fullHtml = containers
+            let fullHtml = containers
               .sort((a, b) => (a.order || 0) - (b.order || 0))
               .map(c => c.content || '')
               .join('');
+
+            // GENERATE MODE: resolve variables directly in the HTML before loading
+            if (isGenerateMode && Object.keys(variableMap).length > 0) {
+              // Resolve {{mustache}} variables
+              fullHtml = resolveVariables(fullHtml, variableMap, quoteData);
+
+              // Resolve variable chips (ql-variable spans) with real values
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = fullHtml;
+              tempDiv.querySelectorAll('.ql-variable').forEach(chip => {
+                const key = chip.getAttribute('data-variable');
+                const resolved = variableMap[key] || chip.textContent;
+                chip.replaceWith(document.createTextNode(resolved));
+              });
+              fullHtml = tempDiv.innerHTML;
+            }
+
             quillInstance.root.innerHTML = fullHtml;
           }
         } catch (err) {
