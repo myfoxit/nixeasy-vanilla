@@ -435,7 +435,9 @@ async function sendMessage(input) {
   const assistantMsg = { role: 'assistant', content: '', toolCalls: [] };
 
   try {
-    const res = await fetch('/ai/chat', {
+    // Direct to AI service (bypasses nginx SSE buffering issues)
+    const aiBase = window.location.port === '8080' ? `${window.location.protocol}//${window.location.hostname}:3000` : '';
+    const res = await fetch(`${aiBase}/ai/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: apiMessages }),
