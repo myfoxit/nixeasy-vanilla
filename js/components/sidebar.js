@@ -66,9 +66,8 @@ const NAV_SECTIONS = [
   {
     title: 'Documents',
     items: [
-      { key: 'textContainers', label: 'Text Containers', icon: 'documents', route: '/text-containers' },
-      { key: 'documentTemplates', label: 'Document Templates', icon: 'documents', route: '/document-templates',
-        isActive: (path) => path.startsWith('/document-templates') || path.startsWith('/pdf-generator') },
+      { key: 'documents', label: 'Documents', icon: 'documents', route: '/documents',
+        isActive: (path) => path.startsWith('/documents') },
     ],
   },
   {

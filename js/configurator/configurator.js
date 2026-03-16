@@ -632,7 +632,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       pdfBtn.addEventListener('mouseleave', () => { pdfBtn.style.background = 'transparent'; });
       pdfBtn.addEventListener('click', () => {
         if (exportPopoverInstance) exportPopoverInstance.close();
-        navigate(`/pdf-generator?opportunityId=${oppId}&quoteId=${qId}`);
+        navigate(`/documents?opportunityId=${oppId}&quoteId=${qId}`);
       });
 
       const pdfSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -651,7 +651,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       const pdfText = document.createElement('div');
       const pdfName = document.createElement('div');
       pdfName.style.fontWeight = '500';
-      pdfName.textContent = 'PDF from Template';
+      pdfName.textContent = 'Generate Document';
       const pdfDesc = document.createElement('div');
       pdfDesc.style.cssText = 'font-size:0.75rem;color:#6b7280;';
       pdfDesc.textContent = 'Generate PDF with document template';
