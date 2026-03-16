@@ -398,7 +398,8 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
 
       // More menu (ghost button: "More ⋮") — contains Load Template, Save as Template, Duplicate, History
       const moreTrigger = document.createElement('button');
-      moreTrigger.style.cssText = 'background:transparent;border:none;font-size:0.85rem;padding:6px 10px;cursor:pointer;color:var(--text-secondary);line-height:1;border-radius:6px;transition:background 0.15s;font-weight:500;display:flex;align-items:center;gap:4px;';
+      moreTrigger.className = 'btn btn-sm';
+      moreTrigger.style.cssText = 'background:transparent;border:none;cursor:pointer;color:var(--text-secondary);transition:background 0.15s;font-weight:500;gap:4px;';
       moreTrigger.innerHTML = 'More <span style="font-size:1.1rem;line-height:1;">⋮</span>';
       moreTrigger.title = 'More actions';
       moreTrigger.addEventListener('mouseenter', () => { moreTrigger.style.background = 'var(--hover-bg, #f3f4f6)'; });
