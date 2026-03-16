@@ -154,9 +154,9 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
         badgeRow.style.cssText = 'display:flex;gap:4px;margin-bottom:2px;';
         // Type badge (BASE/MODULE/ADDON/DL)
         const TYPE_BADGE_COLORS = {
-          BASE: { color: '#4f46e5', bg: '#eef2ff' },
-          MODULE: { color: '#eab308', bg: '#fefce8' },
-          ADDON: { color: '#f97316', bg: '#fff7ed' },
+          BASE: { color: '#3b82f6', bg: '#eff6ff' },
+          MODULE: { color: '#22c55e', bg: '#f0fdf4' },
+          ADDON: { color: '#a855f7', bg: '#faf5ff' },
           DL: { color: '#06b6d4', bg: '#ecfeff' },
         };
         const tbc = TYPE_BADGE_COLORS[lic.type] || { color: 'var(--primary)', bg: 'var(--primary-light)' };
@@ -255,9 +255,9 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
 
       // Type badge colors
       const TYPE_COLORS = {
-        BASE: { color: '#4f46e5', bg: '#eef2ff' },
-        MODULE: { color: '#eab308', bg: '#fefce8' },
-        ADDON: { color: '#f97316', bg: '#fff7ed' },
+        BASE: { color: '#3b82f6', bg: '#eff6ff' },
+        MODULE: { color: '#22c55e', bg: '#f0fdf4' },
+        ADDON: { color: '#a855f7', bg: '#faf5ff' },
         DL: { color: '#06b6d4', bg: '#ecfeff' },
       };
 
