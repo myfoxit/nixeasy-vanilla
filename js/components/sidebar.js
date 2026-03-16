@@ -68,6 +68,8 @@ const NAV_SECTIONS = [
     items: [
       { key: 'documents', label: 'Documents', icon: 'documents', route: '/documents',
         isActive: (path) => path.startsWith('/documents') },
+      { key: 'textContainers', label: 'Text Containers', icon: 'templates', route: '/text-containers',
+        isActive: (path) => path.startsWith('/text-containers') },
     ],
   },
   {

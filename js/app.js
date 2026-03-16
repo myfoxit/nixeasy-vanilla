@@ -20,6 +20,8 @@ import { initCommandPalette } from './components/command-palette.js';
 import { createChatFAB } from './components/chat-panel.js';
 import { createAiSettingsView } from './views/ai-settings.js';
 import { createDocumentEditorView } from './views/document-editor.js';
+import { createDocumentListView } from './views/document-list.js';
+import { createTextContainersView } from './views/text-containers.js';
 
 // ---------------------------------------------------------------------------
 // Theme initialisation (before first paint)
@@ -226,14 +228,24 @@ function registerRoutes(main) {
     return createAiSettingsView(container);
   });
 
-  // Document Editor (standalone)
+  // Document templates list
   addRoute('/documents', (container) => {
+    return createDocumentListView(container);
+  });
+
+  // New document editor
+  addRoute('/documents/new', (container) => {
     return createDocumentEditorView(container);
   });
 
-  // Document Editor (edit existing template)
+  // Edit existing document
   addRoute('/documents/:templateId', (container, params) => {
     return createDocumentEditorView(container, { templateId: params.templateId });
+  });
+
+  // Text containers list
+  addRoute('/text-containers', (container) => {
+    return createTextContainersView(container);
   });
 }
 

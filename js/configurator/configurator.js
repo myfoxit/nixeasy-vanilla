@@ -632,7 +632,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       pdfBtn.addEventListener('mouseleave', () => { pdfBtn.style.background = 'transparent'; });
       pdfBtn.addEventListener('click', () => {
         if (exportPopoverInstance) exportPopoverInstance.close();
-        navigate(`/documents?opportunityId=${oppId}&quoteId=${qId}`);
+        navigate(`/documents/new?opportunityId=${oppId}&quoteId=${qId}`);
       });
 
       const pdfSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
