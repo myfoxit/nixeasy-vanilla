@@ -88,18 +88,25 @@ app.post('/ai/chat', async (req, res) => {
     return res.status(400).json({ error: 'messages array required' });
   }
 
-  // SSE headers
+  // SSE headers (OpenAI-compatible format: data: {json}\n\n)
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
-  // Disable Nagle's algorithm for immediate writes
   if (res.socket) res.socket.setNoDelay(true);
 
-  const send = (event, data) => {
+  const send = (data) => {
     return new Promise((resolve) => {
-      const ok = res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      const ok = res.write(`data: ${JSON.stringify(data)}\n\n`);
+      if (ok) resolve();
+      else res.once('drain', resolve);
+    });
+  };
+
+  const sendDone = () => {
+    return new Promise((resolve) => {
+      const ok = res.write('data: [DONE]\n\n');
       if (ok) resolve();
       else res.once('drain', resolve);
     });
@@ -111,40 +118,37 @@ app.post('/ai/chat', async (req, res) => {
   try {
     const provider = providerId ? await getProvider(providerId) : await getDefaultProvider();
     if (!provider) {
-      send('error', { error: 'No AI provider configured. Go to AI Settings to add one.' });
-      res.write('event: done\ndata: {}\n\n');
+      await send({ type: 'error', error: 'No AI provider configured. Go to AI Settings to add one.' });
+      await sendDone();
       res.end();
       return;
     }
 
     console.log(`Chat request: provider=${provider.name} model=${model || provider.defaultModel} messages=${messages.length}`);
-    await send('status', { provider: provider.name, model: model || provider.defaultModel });
-    // Debug: test if subsequent writes reach the client
-    console.log('Debug token sent, starting LLM call...');
 
-    const result = await runChat({
+    await runChat({
       messages,
       provider,
       model,
       onToken: async (token) => {
-        if (!closed) await send('token', { token });
+        if (!closed) await send({ choices: [{ delta: { content: token } }] });
       },
       onToolCall: async ({ name, args, result }) => {
         if (!closed) {
           const summary = summarizeToolResult(name, result);
-          await send('tool', { name, args, summary, resultCount: Array.isArray(result) ? result.length : undefined });
+          await send({ tool_call: { name, args, summary, resultCount: Array.isArray(result) ? result.length : undefined } });
         }
       },
     });
 
     if (!closed) {
-      await send('done', { fullText: result });
+      await sendDone();
     }
   } catch (err) {
     console.error('Chat error:', err);
     if (!closed) {
-      await send('error', { error: err.message || 'An error occurred' });
-      await send('done', {});
+      await send({ type: 'error', error: err.message || 'An error occurred' });
+      await sendDone();
     }
   }
 

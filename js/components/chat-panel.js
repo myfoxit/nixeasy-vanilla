@@ -435,127 +435,92 @@ async function sendMessage(input) {
   const assistantMsg = { role: 'assistant', content: '', toolCalls: [] };
 
   try {
-    // Direct to AI service (bypasses nginx SSE buffering issues)
-    const aiBase = window.location.port === '8080' ? `${window.location.protocol}//${window.location.hostname}:3000` : '';
-    const res = await fetch(`${aiBase}/ai/chat`, {
+    const res = await fetch('/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: apiMessages }),
     });
 
-    console.log('[chat] Response:', res.status, res.headers.get('content-type'), 'body:', !!res.body);
-
     if (!res.ok) {
       const errText = await res.text();
-      console.error('[chat] Error response:', errText);
       throw new Error(`HTTP ${res.status}: ${errText}`);
     }
 
-    // Try reading as text first to debug
-    if (!res.body || !res.body.getReader) {
-      const text = await res.text();
-      console.log('[chat] No streaming support, full response:', text);
-      // Parse events from full text
-      for (const block of text.split('\n\n')) {
-        processBlock(block);
-      }
-    } else {
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('No response body');
 
-    // Parse SSE stream
-    const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
     let bubbleEl = null;
-    let currentEventType = '';
 
-    const processBlock = (block) => {
-      let eventType = '';
-      let dataStr = '';
-
-      for (const line of block.split('\n')) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('event:')) {
-          eventType = trimmed.slice(trimmed.indexOf(':') + 1).trim();
-        } else if (trimmed.startsWith('data:')) {
-          dataStr = trimmed.slice(trimmed.indexOf(':') + 1).trim();
-        }
-      }
-
-      console.log('[chat-sse]', eventType, dataStr?.slice(0, 80));
-      if (!dataStr) return;
-
-      let data;
-      try { data = JSON.parse(dataStr); } catch { return; }
-
-      if (eventType === 'status') {
-        currentProvider = data;
-      } else if (eventType === 'token') {
-        if (typingEl.parentNode) typingEl.remove();
-
-        assistantMsg.content += data.token;
-
-        if (!bubbleEl) {
-          bubbleEl = document.createElement('div');
-          bubbleEl.className = 'chat-bubble assistant';
-          container.appendChild(bubbleEl);
-        }
-        bubbleEl.innerHTML = renderMarkdown(assistantMsg.content);
-        container.scrollTop = container.scrollHeight;
-      } else if (eventType === 'tool') {
-        if (typingEl.parentNode) typingEl.remove();
-
-        assistantMsg.toolCalls.push({
-          name: data.name,
-          args: data.args,
-          summary: `${getToolIcon(data.name)} ${formatToolName(data.name)}${data.resultCount !== undefined ? ` (${data.resultCount})` : ''}`,
-        });
-
-        const wrap = document.createElement('div');
-        wrap.style.alignSelf = 'flex-start';
-        const chip = document.createElement('button');
-        chip.className = 'chat-tool-chip';
-        chip.textContent = assistantMsg.toolCalls[assistantMsg.toolCalls.length - 1].summary;
-        const detail = document.createElement('div');
-        detail.className = 'chat-tool-detail';
-        detail.textContent = JSON.stringify(data.args, null, 2);
-        chip.addEventListener('click', () => detail.classList.toggle('open'));
-        wrap.appendChild(chip);
-        wrap.appendChild(detail);
-        container.appendChild(wrap);
-        container.scrollTop = container.scrollHeight;
-      } else if (eventType === 'error') {
-        if (typingEl.parentNode) typingEl.remove();
-        messages.push({ role: 'error', content: data.error });
-        const errBubble = document.createElement('div');
-        errBubble.className = 'chat-bubble error';
-        errBubble.textContent = data.error;
-        container.appendChild(errBubble);
-      }
-    };
-
-    console.log('[chat] Starting SSE stream read');
     while (true) {
       const { done, value } = await reader.read();
-      if (done) { console.log('[chat] Stream done, buffer remaining:', buffer.length); break; }
+      if (done) break;
 
-      const chunk = decoder.decode(value, { stream: true });
-      console.log('[chat] Chunk received:', chunk.length, 'bytes:', chunk.slice(0, 100));
-      buffer += chunk;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
-      // SSE events are separated by double newlines
-      let sepIdx;
-      while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
-        processBlock(buffer.slice(0, sepIdx));
-        buffer = buffer.slice(sepIdx + 2);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+        const dataStr = trimmed.slice(6);
+        if (dataStr === '[DONE]') continue;
+
+        let data;
+        try { data = JSON.parse(dataStr); } catch { continue; }
+
+        // Error
+        if (data.type === 'error') {
+          if (typingEl.parentNode) typingEl.remove();
+          messages.push({ role: 'error', content: data.error });
+          const errBubble = document.createElement('div');
+          errBubble.className = 'chat-bubble error';
+          errBubble.textContent = data.error;
+          container.appendChild(errBubble);
+          continue;
+        }
+
+        // Tool call
+        if (data.tool_call) {
+          if (typingEl.parentNode) typingEl.remove();
+          const tc = data.tool_call;
+          assistantMsg.toolCalls.push({
+            name: tc.name, args: tc.args,
+            summary: `${getToolIcon(tc.name)} ${formatToolName(tc.name)}${tc.resultCount !== undefined ? ` (${tc.resultCount})` : ''}`,
+          });
+          const wrap = document.createElement('div');
+          wrap.style.alignSelf = 'flex-start';
+          const chip = document.createElement('button');
+          chip.className = 'chat-tool-chip';
+          chip.textContent = assistantMsg.toolCalls[assistantMsg.toolCalls.length - 1].summary;
+          const detail = document.createElement('div');
+          detail.className = 'chat-tool-detail';
+          detail.textContent = JSON.stringify(tc.args, null, 2);
+          chip.addEventListener('click', () => detail.classList.toggle('open'));
+          wrap.appendChild(chip);
+          wrap.appendChild(detail);
+          container.appendChild(wrap);
+          container.scrollTop = container.scrollHeight;
+          continue;
+        }
+
+        // Text token (OpenAI format: choices[0].delta.content)
+        const content = data.choices?.[0]?.delta?.content;
+        if (content) {
+          if (typingEl.parentNode) typingEl.remove();
+          assistantMsg.content += content;
+          if (!bubbleEl) {
+            bubbleEl = document.createElement('div');
+            bubbleEl.className = 'chat-bubble assistant';
+            container.appendChild(bubbleEl);
+          }
+          bubbleEl.innerHTML = renderMarkdown(assistantMsg.content);
+          container.scrollTop = container.scrollHeight;
+        }
       }
     }
-
-    // Process any remaining data in buffer after stream ends
-    if (buffer.trim()) {
-      processBlock(buffer);
-    }
-
-    } // end streaming else
 
     if (typingEl.parentNode) typingEl.remove();
     if (assistantMsg.content || assistantMsg.toolCalls.length) {
