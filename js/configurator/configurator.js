@@ -339,7 +339,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
 
     // Top row: back + title + name + actions
     const headerTop = document.createElement('div');
-    headerTop.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+    headerTop.style.cssText = 'display:flex;justify-content:space-between;align-items:center;width:100%;';
 
     const headerLeft = document.createElement('div');
     headerLeft.style.cssText = 'display:flex;align-items:center;gap:12px;';
