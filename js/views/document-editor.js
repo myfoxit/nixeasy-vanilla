@@ -146,6 +146,48 @@ export function createDocumentEditorView(container, opts = {}) {
     }
   });
 
+  // Preview toggle — shows resolved data instead of variable chips
+  let previewMode = false;
+  const previewBtn = document.createElement('button');
+  previewBtn.className = 'btn btn-secondary btn-sm';
+  previewBtn.textContent = '👁 Preview Data';
+  previewBtn.title = 'Toggle between variable chips and resolved data';
+  previewBtn.addEventListener('click', togglePreview);
+  headerActions.appendChild(previewBtn);
+
+  function togglePreview() {
+    if (!quillInstance) return;
+    previewMode = !previewMode;
+    previewBtn.textContent = previewMode ? '✏️ Edit Mode' : '👁 Preview Data';
+
+    const chips = quillInstance.root.querySelectorAll('.ql-variable');
+    if (previewMode) {
+      // Replace chips with resolved text (visual only — store originals)
+      chips.forEach(chip => {
+        const key = chip.getAttribute('data-variable');
+        const resolved = variableMap[key] || `{{${key}}}`;
+        chip.setAttribute('data-original-label', chip.textContent);
+        chip.textContent = resolved;
+        chip.style.background = '#d1fae5';
+        chip.style.color = '#065f46';
+      });
+      quillInstance.disable();
+    } else {
+      // Restore chips
+      const allChips = quillInstance.root.querySelectorAll('.ql-variable');
+      allChips.forEach(chip => {
+        const original = chip.getAttribute('data-original-label');
+        if (original) {
+          chip.textContent = original;
+          chip.removeAttribute('data-original-label');
+        }
+        chip.style.background = '';
+        chip.style.color = '';
+      });
+      quillInstance.enable();
+    }
+  }
+
   const saveBtn = document.createElement('button');
   saveBtn.className = 'btn btn-secondary btn-sm';
   saveBtn.textContent = 'Save';

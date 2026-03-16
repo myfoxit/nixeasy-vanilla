@@ -630,9 +630,21 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       pdfBtn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:transparent;cursor:pointer;border-radius:6px;font-size:0.875rem;text-align:left;transition:background 0.1s;';
       pdfBtn.addEventListener('mouseenter', () => { pdfBtn.style.background = '#f3f4f6'; });
       pdfBtn.addEventListener('mouseleave', () => { pdfBtn.style.background = 'transparent'; });
-      pdfBtn.addEventListener('click', () => {
+      pdfBtn.addEventListener('click', async () => {
         if (exportPopoverInstance) exportPopoverInstance.close();
-        navigate(`/documents/new?opportunityId=${oppId}&quoteId=${qId}`);
+        // Show template picker modal
+        try {
+          const templates = await pb.collection('document_templates').getFullList({ sort: '-updated' });
+          if (templates.length === 0) {
+            // No templates — go to new document
+            navigate(`/documents/new?opportunityId=${oppId}&quoteId=${qId}`);
+            return;
+          }
+          showTemplatePicker(templates, oppId, qId);
+        } catch (err) {
+          console.error('Failed to load templates:', err);
+          navigate(`/documents/new?opportunityId=${oppId}&quoteId=${qId}`);
+        }
       });
 
       const pdfSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1036,6 +1048,77 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
   // ======================================================
   // CLEANUP
   // ======================================================
+  function showTemplatePicker(templates, oppId, qId) {
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;display:flex;align-items:center;justify-content:center;';
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--surface,#fff);border-radius:12px;padding:24px;width:480px;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+
+    const title = document.createElement('h3');
+    title.style.cssText = 'margin:0 0 4px;font-size:1.1rem;';
+    title.textContent = 'Select Document Template';
+    modal.appendChild(title);
+
+    const subtitle = document.createElement('p');
+    subtitle.style.cssText = 'margin:0 0 16px;font-size:0.8rem;color:var(--text-secondary,#6b7280);';
+    subtitle.textContent = 'Choose a template to generate, or start with a blank document.';
+    modal.appendChild(subtitle);
+
+    const list = document.createElement('div');
+    list.style.cssText = 'overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:6px;margin-bottom:16px;';
+
+    templates.forEach(tpl => {
+      const item = document.createElement('button');
+      item.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:12px;border:1px solid var(--border,#e5e7eb);background:transparent;cursor:pointer;border-radius:8px;text-align:left;transition:all 0.15s;';
+      item.addEventListener('mouseenter', () => { item.style.borderColor = 'var(--primary,#6366f1)'; item.style.background = 'var(--bg,#f9fafb)'; });
+      item.addEventListener('mouseleave', () => { item.style.borderColor = 'var(--border,#e5e7eb)'; item.style.background = 'transparent'; });
+      item.addEventListener('click', () => {
+        backdrop.remove();
+        navigate(`/documents/${tpl.id}?opportunityId=${oppId}&quoteId=${qId}`);
+      });
+
+      const name = document.createElement('div');
+      name.style.cssText = 'font-weight:600;font-size:0.9rem;color:var(--text-main,#111827);';
+      name.textContent = tpl.name;
+      item.appendChild(name);
+
+      if (tpl.description) {
+        const desc = document.createElement('div');
+        desc.style.cssText = 'font-size:0.75rem;color:var(--text-secondary,#6b7280);';
+        desc.textContent = tpl.description;
+        item.appendChild(desc);
+      }
+
+      list.appendChild(item);
+    });
+
+    modal.appendChild(list);
+
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:space-between;gap:8px;';
+
+    const blankBtn = document.createElement('button');
+    blankBtn.className = 'btn btn-secondary btn-sm';
+    blankBtn.textContent = 'Blank Document';
+    blankBtn.addEventListener('click', () => {
+      backdrop.remove();
+      navigate(`/documents/new?opportunityId=${oppId}&quoteId=${qId}`);
+    });
+    footer.appendChild(blankBtn);
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-secondary btn-sm';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => backdrop.remove());
+    footer.appendChild(cancelBtn);
+
+    modal.appendChild(footer);
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+  }
+
   function destroy() {
     if (exportPopoverInstance) exportPopoverInstance.destroy();
     if (loadPopoverInstance) loadPopoverInstance.destroy();
