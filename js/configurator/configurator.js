@@ -386,20 +386,24 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       headerRight.appendChild(saveBtn);
 
       // Hidden anchors for Load/Save Template popovers (opened from more menu)
+      // Positioned absolute so they don't affect layout/gap
+      const hiddenAnchors = document.createElement('div');
+      hiddenAnchors.style.cssText = 'position:absolute;right:0;top:0;width:0;height:0;overflow:visible;';
+
       const loadAnchor = document.createElement('span');
-      loadAnchor.style.cssText = 'position:relative;display:inline-block;width:0;overflow:visible;';
       loadPopoverInstance = createPopover({ trigger: loadAnchor, content: () => buildLoadTemplateContent(), align: 'right', width: 320 });
-      headerRight.appendChild(loadPopoverInstance.element);
+      hiddenAnchors.appendChild(loadPopoverInstance.element);
 
       const saveAnchor = document.createElement('span');
-      saveAnchor.style.cssText = 'position:relative;display:inline-block;width:0;overflow:visible;';
       savePopoverInstance = createPopover({ trigger: saveAnchor, content: () => buildSaveTemplateContent(), align: 'right', width: 320 });
-      headerRight.appendChild(savePopoverInstance.element);
+      hiddenAnchors.appendChild(savePopoverInstance.element);
+
+      headerRight.style.position = 'relative';
+      headerRight.appendChild(hiddenAnchors);
 
       // More menu (ghost button: "More ⋮") — contains Load Template, Save as Template, Duplicate, History
       const moreTrigger = document.createElement('button');
-      moreTrigger.className = 'btn btn-sm';
-      moreTrigger.style.cssText = 'background:transparent;border:none;cursor:pointer;color:var(--text-secondary);transition:background 0.15s;font-weight:500;gap:4px;';
+      moreTrigger.style.cssText = 'background:transparent;border:none;font-size:0.85rem;padding:6px 10px;cursor:pointer;color:var(--text-secondary);line-height:1;border-radius:6px;transition:background 0.15s;font-weight:500;display:inline-flex;align-items:center;gap:4px;';
       moreTrigger.innerHTML = 'More <span style="font-size:1.1rem;line-height:1;">⋮</span>';
       moreTrigger.title = 'More actions';
       moreTrigger.addEventListener('mouseenter', () => { moreTrigger.style.background = 'var(--hover-bg, #f3f4f6)'; });
