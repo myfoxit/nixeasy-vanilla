@@ -420,16 +420,16 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
     const filterRow = document.createElement('div');
     filterRow.style.cssText = 'display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;';
     const LEVEL_TABS = [
-      { key: 'ALL', label: 'All' },
-      { key: 'BASE', label: 'Base' },
-      { key: 'MODULE', label: 'Module' },
-      { key: 'ADDON', label: 'Add-on' },
-      { key: 'DL', label: 'Device' },
+      { key: 'ALL', label: 'All', color: 'var(--primary)', bg: 'var(--primary-light)' },
+      { key: 'BASE', label: 'Base', color: '#3b82f6', bg: '#eff6ff' },
+      { key: 'MODULE', label: 'Module', color: '#22c55e', bg: '#f0fdf4' },
+      { key: 'ADDON', label: 'Add-on', color: '#a855f7', bg: '#faf5ff' },
+      { key: 'DL', label: 'Device', color: '#06b6d4', bg: '#ecfeff' },
     ];
     LEVEL_TABS.forEach(tab => {
       const btn = document.createElement('button');
       const isActive = levelFilter === tab.key;
-      btn.style.cssText = `padding:3px 10px;border:1px solid ${isActive ? 'var(--primary)' : 'var(--border)'};border-radius:4px;font-size:0.7rem;font-weight:${isActive ? '600' : '500'};cursor:pointer;transition:all 0.15s;background:${isActive ? 'var(--primary)' : 'var(--surface)'};color:${isActive ? 'white' : 'var(--text-secondary)'};`;
+      btn.style.cssText = `padding:3px 10px;border:1px solid ${isActive ? tab.color : 'var(--border)'};border-radius:4px;font-size:0.7rem;font-weight:${isActive ? '600' : '500'};cursor:pointer;transition:all 0.15s;background:${isActive ? tab.color : 'var(--surface)'};color:${isActive ? 'white' : 'var(--text-secondary)'};`;
       btn.textContent = tab.label;
       btn.addEventListener('click', () => { levelFilter = tab.key; currentPage = 1; render(); });
       filterRow.appendChild(btn);
