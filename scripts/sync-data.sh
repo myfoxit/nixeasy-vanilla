@@ -12,8 +12,6 @@ set -euo pipefail
 SOURCE="https://base.heli0s.dev"
 TARGET="http://localhost:8090"
 
-COLLECTIONS=("licenses" "service_level_agreements" "service_packs")
-
 if [ $# -lt 2 ]; then
   echo "Usage: $0 <superuser-email> <superuser-password>"
   echo "  Credentials are for the LOCAL PocketBase superuser."
@@ -50,35 +48,29 @@ fi
 
 echo "✅ Authenticated"
 
-for COLLECTION in "${COLLECTIONS[@]}"; do
+# ---------------------------------------------------------------------------
+# Sync a collection (simple, no relation issues)
+# ---------------------------------------------------------------------------
+sync_collection() {
+  local COLLECTION="$1"
+
   echo ""
   echo "📦 Syncing: ${COLLECTION}"
 
-  # Fetch all records from source (public, no auth needed)
   RECORDS=$(curl -sf "${SOURCE}/api/collections/${COLLECTION}/records?perPage=500" \
     | jq '.items')
-
   COUNT=$(echo "$RECORDS" | jq 'length')
   echo "   Found ${COUNT} records on remote"
 
-  if [ "$COUNT" -eq 0 ]; then
-    echo "   ⏭️  Nothing to sync"
-    continue
-  fi
+  [ "$COUNT" -eq 0 ] && { echo "   ⏭️  Nothing to sync"; return; }
 
-  SUCCESS=0
-  SKIPPED=0
-  FAILED=0
+  local SUCCESS=0 SKIPPED=0 FAILED=0
 
-  # Insert each record into target
   for i in $(seq 0 $((COUNT - 1))); do
     RECORD=$(echo "$RECORDS" | jq ".[$i]")
     RECORD_ID=$(echo "$RECORD" | jq -r '.id')
+    PAYLOAD=$(echo "$RECORD" | jq 'del(.collectionId, .collectionName, .expand)')
 
-    # Strip system fields that PB manages (created/updated are kept for data fidelity)
-    PAYLOAD=$(echo "$RECORD" | jq 'del(.collectionId, .collectionName)')
-
-    # Try to create with the same ID
     HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
       "${TARGET}/api/collections/${COLLECTION}/records" \
       -H "Content-Type: application/json" \
@@ -88,27 +80,102 @@ for COLLECTION in "${COLLECTIONS[@]}"; do
     if [ "$HTTP_CODE" = "200" ]; then
       SUCCESS=$((SUCCESS + 1))
     elif [ "$HTTP_CODE" = "400" ]; then
-      # Likely already exists — try update
       HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
         "${TARGET}/api/collections/${COLLECTION}/records/${RECORD_ID}" \
         -X PATCH \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer ${TOKEN}" \
         -d "$PAYLOAD")
-      if [ "$HTTP_CODE" = "200" ]; then
-        SKIPPED=$((SKIPPED + 1))
-      else
-        FAILED=$((FAILED + 1))
-        echo "   ⚠️  Failed to upsert ${RECORD_ID} (HTTP ${HTTP_CODE})"
-      fi
+      [ "$HTTP_CODE" = "200" ] && SKIPPED=$((SKIPPED + 1)) || { FAILED=$((FAILED + 1)); echo "   ⚠️  Failed ${RECORD_ID} (HTTP ${HTTP_CODE})"; }
     else
       FAILED=$((FAILED + 1))
-      echo "   ⚠️  Failed to create ${RECORD_ID} (HTTP ${HTTP_CODE})"
+      echo "   ⚠️  Failed ${RECORD_ID} (HTTP ${HTTP_CODE})"
     fi
   done
 
   echo "   ✅ ${SUCCESS} created, 🔄 ${SKIPPED} updated, ❌ ${FAILED} failed"
-done
+}
+
+# ---------------------------------------------------------------------------
+# Sync licenses (two-pass: create without relations, then patch relations)
+# ---------------------------------------------------------------------------
+sync_licenses() {
+  local COLLECTION="licenses"
+
+  echo ""
+  echo "📦 Syncing: ${COLLECTION} (two-pass for relations)"
+
+  RECORDS=$(curl -sf "${SOURCE}/api/collections/${COLLECTION}/records?perPage=500" \
+    | jq '.items')
+  COUNT=$(echo "$RECORDS" | jq 'length')
+  echo "   Found ${COUNT} records on remote"
+
+  [ "$COUNT" -eq 0 ] && { echo "   ⏭️  Nothing to sync"; return; }
+
+  # Pass 1: Create records without relation fields
+  echo "   Pass 1: Creating records (without relations)..."
+  local CREATED=0 EXISTS=0 FAIL1=0
+
+  for i in $(seq 0 $((COUNT - 1))); do
+    RECORD=$(echo "$RECORDS" | jq ".[$i]")
+    RECORD_ID=$(echo "$RECORD" | jq -r '.id')
+
+    # Strip relation fields + system fields
+    PAYLOAD=$(echo "$RECORD" | jq 'del(.collectionId, .collectionName, .expand, .possible_SLAs, .depends_on)')
+
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+      "${TARGET}/api/collections/${COLLECTION}/records" \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer ${TOKEN}" \
+      -d "$PAYLOAD")
+
+    if [ "$HTTP_CODE" = "200" ]; then
+      CREATED=$((CREATED + 1))
+    elif [ "$HTTP_CODE" = "400" ]; then
+      EXISTS=$((EXISTS + 1))
+    else
+      FAIL1=$((FAIL1 + 1))
+      echo "   ⚠️  Pass 1 failed ${RECORD_ID} (HTTP ${HTTP_CODE})"
+    fi
+  done
+
+  echo "   ✅ ${CREATED} created, ⏭️  ${EXISTS} exist, ❌ ${FAIL1} failed"
+
+  # Pass 2: Patch relation fields onto existing records
+  echo "   Pass 2: Patching relations..."
+  local PATCHED=0 FAIL2=0
+
+  for i in $(seq 0 $((COUNT - 1))); do
+    RECORD=$(echo "$RECORDS" | jq ".[$i]")
+    RECORD_ID=$(echo "$RECORD" | jq -r '.id')
+
+    # Only send relation fields
+    RELATIONS=$(echo "$RECORD" | jq '{possible_SLAs, depends_on}')
+
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+      "${TARGET}/api/collections/${COLLECTION}/records/${RECORD_ID}" \
+      -X PATCH \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer ${TOKEN}" \
+      -d "$RELATIONS")
+
+    if [ "$HTTP_CODE" = "200" ]; then
+      PATCHED=$((PATCHED + 1))
+    else
+      FAIL2=$((FAIL2 + 1))
+      echo "   ⚠️  Pass 2 failed ${RECORD_ID} (HTTP ${HTTP_CODE})"
+    fi
+  done
+
+  echo "   ✅ ${PATCHED} patched, ❌ ${FAIL2} failed"
+}
+
+# ---------------------------------------------------------------------------
+# Run in dependency order
+# ---------------------------------------------------------------------------
+sync_collection "service_level_agreements"
+sync_collection "service_packs"
+sync_licenses
 
 echo ""
 echo "🎉 Sync complete!"
