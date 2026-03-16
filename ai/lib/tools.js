@@ -98,16 +98,25 @@ const tools = [
   },
   {
     name: 'get_opportunity',
-    description: 'Get a single opportunity by ID, including customer details.',
+    description: 'Get a single opportunity by record ID or opportunity number, including customer details.',
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Opportunity record ID' },
+        id: { type: 'string', description: 'PocketBase record ID or opportunity number (e.g. "1000063258")' },
       },
       required: ['id'],
     },
     execute: async ({ id }) => {
-      const o = await pbGet(`collections/opportunities/records/${id}?expand=customer`);
+      let o;
+      try {
+        // Try direct record ID first
+        o = await pbGet(`collections/opportunities/records/${id}?expand=customer`);
+      } catch {
+        // Fall back to searching by opportunity number field
+        const data = await pbGet(`collections/opportunities/records?filter=opportunity="${id}"&expand=customer&perPage=1`);
+        if (!data.items?.length) throw new Error(`Opportunity "${id}" not found`);
+        o = data.items[0];
+      }
       return {
         id: o.id, opportunity: o.opportunity, title: o.title, status: o.status,
         capex: o.capex, opex_monthly: o.opex_monthly, contract_term_months: o.contract_term_months,
@@ -166,17 +175,26 @@ const tools = [
     parameters: {
       type: 'object',
       properties: {
-        opportunityId: { type: 'string', description: 'Opportunity ID to create quote under' },
+        opportunityId: { type: 'string', description: 'Opportunity record ID or opportunity number (e.g. "1000063258")' },
         name: { type: 'string', description: 'Quote name (default: "New Quote")' },
       },
       required: ['opportunityId'],
     },
     execute: async ({ opportunityId, name }) => {
+      // Resolve opportunity number to record ID if needed
+      let recordId = opportunityId;
+      try {
+        await pbGet(`collections/opportunities/records/${opportunityId}`);
+      } catch {
+        const data = await pbGet(`collections/opportunities/records?filter=opportunity="${opportunityId}"&perPage=1`);
+        if (!data.items?.length) throw new Error(`Opportunity "${opportunityId}" not found`);
+        recordId = data.items[0].id;
+      }
       const quote_data = {
         name: name || 'New Quote',
         groups: [{ name: 'Default', items: [] }],
       };
-      const q = await pbPost('collections/quotes/records', { opportunity: opportunityId, quote_data });
+      const q = await pbPost('collections/quotes/records', { opportunity: recordId, quote_data });
       return { id: q.id, name: quote_data.name, message: 'Quote created successfully' };
     },
   },
