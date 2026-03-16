@@ -185,7 +185,6 @@ export function createDocumentEditorView(container, opts = {}) {
   // =========================================================================
   const editorPane = document.createElement('div');
   editorPane.className = 'fluid-editor-pane';
-  if (isGenerateMode) editorPane.style.flex = '1';
 
   const pageWrap = document.createElement('div');
   pageWrap.className = 'fluid-page-wrap';
@@ -351,7 +350,6 @@ export function createDocumentEditorView(container, opts = {}) {
   // =========================================================================
   const sidebar = document.createElement('div');
   sidebar.className = 'fluid-editor-sidebar';
-  if (isGenerateMode) sidebar.style.display = 'none';
 
   // Tab headers
   const tabBar = document.createElement('div');
@@ -609,8 +607,21 @@ export function createDocumentEditorView(container, opts = {}) {
       item.addEventListener('click', () => {
         if (!quillInstance) return;
         const range = quillInstance.getSelection(true);
-        // Insert the container's HTML using Quill's clipboard
-        quillInstance.clipboard.dangerouslyPasteHTML(range.index, c.content || '');
+        let html = c.content || '';
+        // In generate mode, resolve variables before inserting
+        if (isGenerateMode && Object.keys(variableMap).length > 0) {
+          html = resolveVariables(html, variableMap, quoteData);
+          // Also resolve any variable chip spans
+          const tmp = document.createElement('div');
+          tmp.innerHTML = html;
+          tmp.querySelectorAll('.ql-variable').forEach(chip => {
+            const key = chip.getAttribute('data-variable');
+            const resolved = variableMap[key] || chip.textContent;
+            chip.replaceWith(document.createTextNode(resolved));
+          });
+          html = tmp.innerHTML;
+        }
+        quillInstance.clipboard.dangerouslyPasteHTML(range.index, html);
         showToast(`Inserted "${c.name}"`, 'success');
       });
 
