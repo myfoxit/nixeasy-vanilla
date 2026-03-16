@@ -108,7 +108,10 @@ app.post('/ai/chat', async (req, res) => {
     }
 
     console.log(`Chat request: provider=${provider.name} model=${model || provider.defaultModel} messages=${messages.length}`);
-    send('status', { provider: provider.name, model: model || provider.defaultModel });
+    await send('status', { provider: provider.name, model: model || provider.defaultModel });
+    // Debug: test if subsequent writes reach the client
+    await send('token', { token: 'Thinking...' });
+    console.log('Debug token sent, starting LLM call...');
 
     const result = await runChat({
       messages,
@@ -131,11 +134,12 @@ app.post('/ai/chat', async (req, res) => {
   } catch (err) {
     console.error('Chat error:', err);
     if (!closed) {
-      send('error', { error: err.message || 'An error occurred' });
-      send('done', {});
+      await send('error', { error: err.message || 'An error occurred' });
+      await send('done', {});
     }
   }
 
+  console.log('Chat complete, ending response');
   res.end();
 });
 
