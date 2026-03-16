@@ -25,7 +25,21 @@ export function navigate(hash) {
 }
 
 function handleRoute() {
-  const hash = window.location.hash.slice(1) || '/dashboard';
+  const rawHash = window.location.hash.slice(1) || '/dashboard';
+
+  // Split path from query string
+  const qIndex = rawHash.indexOf('?');
+  const hash = qIndex >= 0 ? rawHash.slice(0, qIndex) : rawHash;
+  const queryString = qIndex >= 0 ? rawHash.slice(qIndex + 1) : '';
+
+  // Parse query params
+  const query = {};
+  if (queryString) {
+    for (const part of queryString.split('&')) {
+      const [k, v] = part.split('=');
+      if (k) query[decodeURIComponent(k)] = decodeURIComponent(v || '');
+    }
+  }
 
   // Cleanup previous view
   if (currentCleanup && typeof currentCleanup === 'function') {
@@ -40,6 +54,8 @@ function handleRoute() {
       route.paramNames.forEach((name, i) => {
         params[name] = match[i + 1];
       });
+      // Merge query params into params (route params take precedence)
+      Object.assign(params, query, params);
       if (container) {
         container.innerHTML = '';
         const result = route.handler(container, params);
