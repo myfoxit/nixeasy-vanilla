@@ -31,12 +31,14 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
     if (existing) {
       existing.amount = (existing.amount || 1) + 1;
     } else {
-      // Dependency validation
-      if (license.depends_on) {
-        const hasDep = items.some(l => l.licenseId === license.depends_on);
-        if (!hasDep) {
-          const depLic = licenses.find(l => l.id === license.depends_on);
-          showToast(`Dependency missing: requires ${depLic?.name || license.depends_on}`, 'error');
+      // Dependency validation — depends_on can be a string ID or array of IDs
+      const deps = license.depends_on;
+      const depIds = Array.isArray(deps) ? deps : (deps ? [deps] : []);
+      if (depIds.length > 0) {
+        const missingDep = depIds.find(depId => !items.some(l => l.licenseId === depId));
+        if (missingDep) {
+          const depLic = licenses.find(l => l.id === missingDep);
+          showToast(`Dependency missing: requires "${depLic?.name || missingDep}"`, 'error');
           return;
         }
       }
@@ -44,7 +46,7 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
       if (license.type === 'ADDON' && license.product) {
         const hasParent = items.some(l => l.product === license.product && (l.type === 'BASE' || l.type === 'MODULE'));
         if (!hasParent) {
-          showToast(`Missing parent module/base for product line: ${license.product}`, 'error');
+          showToast(`Add "${license.product}" base or module first`, 'error');
           return;
         }
       }
