@@ -58,14 +58,14 @@ export function buildVariableMap({ opportunity, customer, quote, quoteData, user
  * Resolve all {{variable}} placeholders in HTML content.
  * {{quote.table}} is handled specially — returns a rendered HTML table.
  */
-export function resolveVariables(html, variableMap, quoteData) {
+export function resolveVariables(html, variableMap, quoteData, format = 'html') {
   if (!html) return '';
 
   return html.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
     const trimmed = key.trim();
 
     if (trimmed === 'quote.table') {
-      return renderQuoteTable(quoteData);
+      return renderQuoteTable(quoteData, format);
     }
 
     if (trimmed in variableMap) {
@@ -78,9 +78,12 @@ export function resolveVariables(html, variableMap, quoteData) {
 }
 
 /**
- * Render the quote line items as an HTML table.
+ * Render the quote line items.
+ * @param {object} quoteData
+ * @param {'html'|'div'} format - 'html' for PDF export (table elements), 'div' for Quill editor (CSS grid divs)
  */
-function renderQuoteTable(quoteData) {
+export function renderQuoteTable(quoteData, format = 'html') {
+  if (format === 'div') return renderQuoteTableDiv(quoteData);
   if (!quoteData) return '<p><em>No quote data available</em></p>';
 
   const groups = quoteData.groups || [];
@@ -172,6 +175,81 @@ function renderQuoteTable(quoteData) {
   }
 
   html += '</tbody></table>';
+  return html;
+}
+
+/**
+ * Render quote table as div-based CSS grid (for Quill editor display).
+ */
+function renderQuoteTableDiv(quoteData) {
+  if (!quoteData) return '<div class="quote-table-embed"><div style="padding:16px;text-align:center;color:#6b7280;font-style:italic;">No quote data available</div></div>';
+
+  const groups = quoteData.groups || [];
+  let lineItems = quoteData.lineItems || [];
+  if (lineItems.length === 0 && groups.length > 0) {
+    lineItems = groups.flatMap(g => (g.lines || []).map(li => ({ ...li, groupId: g.id || g.name })));
+  }
+
+  if (lineItems.length === 0) return '<div class="quote-table-embed"><div style="padding:16px;text-align:center;color:#6b7280;font-style:italic;">No line items</div></div>';
+
+  let html = '';
+
+  // Header
+  html += '<div class="qt-header">';
+  html += '<div class="qt-cell">SKU</div>';
+  html += '<div class="qt-cell">Name</div>';
+  html += '<div class="qt-cell qt-right">Qty</div>';
+  html += '<div class="qt-cell qt-right">Unit Price</div>';
+  html += '<div class="qt-cell">SLA</div>';
+  html += '<div class="qt-cell qt-right">Total</div>';
+  html += '</div>';
+
+  const groupMap = new Map();
+  groups.forEach(g => {
+    if (g.id) groupMap.set(g.id, g);
+    if (g.name) groupMap.set(g.name, g);
+  });
+
+  function renderLineRow(li) {
+    const lineTotal = (li.price || 0) * (li.amount || 1) * (1 + (li.margin || 0) / 100);
+    let row = '<div class="qt-row">';
+    row += `<div class="qt-cell qt-mono">${escapeHtml(li.sku || '-')}</div>`;
+    row += `<div class="qt-cell">${escapeHtml(li.name || '')}</div>`;
+    row += `<div class="qt-cell qt-right">${li.amount || 1}</div>`;
+    row += `<div class="qt-cell qt-right">${currency(li.price || 0)}</div>`;
+    row += `<div class="qt-cell">${escapeHtml(li.slaName || li.sla || '-')}</div>`;
+    row += `<div class="qt-cell qt-right">${currency(lineTotal)}</div>`;
+    row += '</div>';
+    return row;
+  }
+
+  if (groups.length > 0) {
+    groups.forEach(group => {
+      const groupItems = lineItems.filter(li => li.groupId === group.id || li.groupId === group.name);
+      if (groupItems.length === 0) return;
+      html += `<div class="qt-group-header">${escapeHtml(group.name)}</div>`;
+      groupItems.forEach(li => { html += renderLineRow(li); });
+    });
+    const ungrouped = lineItems.filter(li => !li.groupId || !groupMap.has(li.groupId));
+    ungrouped.forEach(li => { html += renderLineRow(li); });
+  } else {
+    lineItems.forEach(li => { html += renderLineRow(li); });
+  }
+
+  // Footer
+  const summary = quoteData.summary || {};
+  html += '<div class="qt-footer">';
+  html += '<div class="qt-cell qt-span">Total (VK)</div>';
+  html += `<div class="qt-cell qt-right">${currency(summary.vk || 0)}</div>`;
+  html += '</div>';
+
+  if (summary.monthly) {
+    html += '<div class="qt-footer">';
+    html += '<div class="qt-cell qt-span">Monthly</div>';
+    html += `<div class="qt-cell qt-right">${currency(summary.monthly)}</div>`;
+    html += '</div>';
+  }
+
   return html;
 }
 

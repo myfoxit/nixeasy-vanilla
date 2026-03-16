@@ -5,7 +5,7 @@
 import { pb } from '../api.js';
 import { navigate } from '../router.js';
 import { showToast } from '../components/toast.js';
-import { getAvailableVariables, getSampleVariableMap, buildVariableMap, resolveVariables } from '../lib/variable-resolver.js';
+import { getAvailableVariables, getSampleVariableMap, buildVariableMap, resolveVariables, renderQuoteTable } from '../lib/variable-resolver.js';
 import { generatePdf } from '../lib/pdf-engine.js';
 
 // ---------------------------------------------------------------------------
@@ -36,6 +36,31 @@ function ensureVariableBlot() {
   VariableBlot.className = 'ql-variable';
 
   window.Quill.register(VariableBlot);
+
+  // QuoteTableBlot — BlockEmbed for the quote line items table
+  const BlockEmbed = window.Quill.import('blots/block/embed');
+
+  class QuoteTableBlot extends BlockEmbed {
+    static create(data) {
+      const node = super.create();
+      node.setAttribute('contenteditable', 'false');
+      node.setAttribute('data-quote-table', 'true');
+      if (data.mode === 'placeholder') {
+        node.innerHTML = '<div class="qt-placeholder"><span class="qt-placeholder-icon">&#9638;</span> Quote Line Items Table <span class="qt-placeholder-hint">(resolved on export)</span></div>';
+      } else {
+        node.innerHTML = data.html || '';
+      }
+      return node;
+    }
+    static value(node) {
+      return { html: node.innerHTML, mode: node.querySelector('.qt-placeholder') ? 'placeholder' : 'rendered' };
+    }
+  }
+  QuoteTableBlot.blotName = 'quotetable';
+  QuoteTableBlot.tagName = 'DIV';
+  QuoteTableBlot.className = 'quote-table-embed';
+
+  window.Quill.register(QuoteTableBlot);
   blotRegistered = true;
 }
 
@@ -316,37 +341,74 @@ export function createDocumentEditorView(container, opts = {}) {
   function insertVariable(key, label) {
     if (!quillInstance) return;
     const range = quillInstance.getSelection(true);
-    if (isGenerateMode) {
-      // In generate mode, insert resolved value directly (or table HTML)
-      if (key === 'quote.table') {
-        const tableHtml = resolveVariables('{{quote.table}}', variableMap, quoteData);
-        quillInstance.clipboard.dangerouslyPasteHTML(range.index, tableHtml);
+    if (key === 'quote.table') {
+      if (isGenerateMode) {
+        // Render as div-based grid inside a QuoteTableBlot
+        const divHtml = renderQuoteTable(quoteData, 'div');
+        quillInstance.insertEmbed(range.index, 'quotetable', { html: divHtml, mode: 'rendered' });
       } else {
-        const resolved = variableMap[key] || `{{${key}}}`;
-        quillInstance.insertText(range.index, resolved);
-        quillInstance.setSelection(range.index + resolved.length);
+        // Template mode: placeholder block
+        quillInstance.insertEmbed(range.index, 'quotetable', { mode: 'placeholder' });
       }
+      quillInstance.setSelection(range.index + 1);
+    } else if (isGenerateMode) {
+      const resolved = variableMap[key] || `{{${key}}}`;
+      quillInstance.insertText(range.index, resolved);
+      quillInstance.setSelection(range.index + resolved.length);
     } else {
       quillInstance.insertEmbed(range.index, 'variable', { key, label });
       quillInstance.setSelection(range.index + 1);
     }
   }
 
-  /** Resolve .ql-variable chips in HTML string to real values */
+  /** Insert HTML at cursor using clipboard.convert + updateContents (more reliable than dangerouslyPasteHTML) */
+  function insertHtmlAtCursor(html) {
+    if (!quillInstance) return;
+    quillInstance.focus();
+    const range = quillInstance.getSelection(true);
+    if (!range) {
+      console.warn('insertHtmlAtCursor: no selection');
+      return;
+    }
+    try {
+      const Delta = window.Quill.import('delta');
+      const delta = quillInstance.clipboard.convert(html);
+      quillInstance.updateContents(
+        new Delta().retain(range.index).concat(delta),
+        'user'
+      );
+      quillInstance.setSelection(range.index + delta.length());
+    } catch (err) {
+      console.error('insertHtmlAtCursor failed:', err);
+      // Fallback
+      quillInstance.clipboard.dangerouslyPasteHTML(range.index, html, 'user');
+    }
+  }
+
+  /** Resolve .ql-variable chips and .quote-table-embed blots in HTML string to real values */
   function resolveChips(html) {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
+
+    // Resolve QuoteTableBlot embeds → proper HTML table for PDF
+    tempDiv.querySelectorAll('.quote-table-embed').forEach(embed => {
+      const tableHtml = renderQuoteTable(quoteData, 'html');
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = tableHtml;
+      embed.replaceWith(...wrapper.childNodes);
+    });
+
+    // Resolve variable chips
     tempDiv.querySelectorAll('.ql-variable').forEach(chip => {
       const key = (chip.getAttribute('data-variable') || '').trim();
       if (key === 'quote.table') {
-        const tableHtml = resolveVariables('{{quote.table}}', variableMap, quoteData);
+        const tableHtml = renderQuoteTable(quoteData, 'html');
         const wrapper = document.createElement('div');
         wrapper.innerHTML = tableHtml;
         chip.replaceWith(...wrapper.childNodes);
       } else if (variableMap[key]) {
         chip.replaceWith(document.createTextNode(variableMap[key]));
       } else {
-        // Try resolving as mustache in case it's a special variable
         const resolved = resolveVariables(`{{${key}}}`, variableMap, quoteData);
         if (resolved !== `{{${key}}}`) {
           const wrapper = document.createElement('div');
@@ -364,111 +426,144 @@ export function createDocumentEditorView(container, opts = {}) {
   // Slash command menu (/ to insert variables and text containers)
   // =========================================================================
   const slashMenu = document.createElement('div');
-  slashMenu.style.cssText = 'display:none;position:fixed;background:var(--surface,#fff);border:1px solid var(--border,#e5e7eb);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:70;width:300px;max-height:320px;overflow-y:auto;padding:4px;';
+  slashMenu.className = 'slash-menu';
   document.body.appendChild(slashMenu);
 
   let slashActive = false;
   let slashStartIndex = -1;
   let slashFilter = '';
+  let slashHighlightIndex = 0;
+  let slashItemCallbacks = [];
 
   function buildSlashItems(filter) {
     slashMenu.innerHTML = '';
     const f = (filter || '').toLowerCase();
-    let hasItems = false;
+    slashItemCallbacks = [];
+    slashHighlightIndex = 0;
 
-    // Variables section
+    // Header
+    const header = document.createElement('div');
+    header.className = 'slash-header';
+    header.textContent = 'Insert...';
+    slashMenu.appendChild(header);
+
+    // Search hint
+    const searchHint = document.createElement('div');
+    searchHint.className = 'slash-search-hint';
+    if (f) {
+      searchHint.innerHTML = `<span class="slash-search-icon">&#128269;</span> <span>${escapeHtmlInline(f)}</span>`;
+    } else {
+      searchHint.innerHTML = '<span class="slash-search-icon">&#128269;</span> <span style="color:var(--text-secondary,#9ca3af);">Type to filter...</span>';
+    }
+    slashMenu.appendChild(searchHint);
+
+    // Items container
+    const itemsWrap = document.createElement('div');
+    itemsWrap.className = 'slash-items';
+
+    // --- Quote Table (special item) ---
+    if (!f || 'quote table'.includes(f) || 'quote.table'.includes(f) || 'line items'.includes(f)) {
+      const idx = slashItemCallbacks.length;
+      const item = document.createElement('button');
+      item.className = 'slash-item slash-item-special';
+      item.setAttribute('data-slash-idx', idx);
+      item.innerHTML = '<span class="slash-icon slash-icon-table">&#9638;</span><div class="slash-item-text"><span class="slash-item-label">Quote Line Items Table</span><span class="slash-item-desc">Insert the full quote table</span></div>';
+      item.addEventListener('mouseenter', () => { slashHighlightIndex = idx; updateSlashHighlight(); });
+      item.addEventListener('mousedown', (e) => { e.preventDefault(); selectSlashItem(idx); });
+      itemsWrap.appendChild(item);
+      slashItemCallbacks.push(() => insertVariable('quote.table', 'Quote Line Items Table'));
+    }
+
+    // --- Variables ---
     const varGroups = getAvailableVariables();
-    const flatVars = varGroups.flatMap(g => g.vars.map(v => ({ ...v, group: g.group })));
+    const flatVars = varGroups.flatMap(g => g.vars.filter(v => v.key !== 'quote.table').map(v => ({ ...v, group: g.group })));
     const matchedVars = flatVars.filter(v => !f || v.label.toLowerCase().includes(f) || v.key.toLowerCase().includes(f));
 
     if (matchedVars.length > 0) {
       const heading = document.createElement('div');
-      heading.style.cssText = 'font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-secondary);padding:6px 8px 2px;';
+      heading.className = 'slash-section-heading';
       heading.textContent = 'Variables';
-      slashMenu.appendChild(heading);
+      itemsWrap.appendChild(heading);
 
       matchedVars.forEach(v => {
-        hasItems = true;
+        const idx = slashItemCallbacks.length;
         const item = document.createElement('button');
-        item.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:6px 10px;border:none;background:transparent;cursor:pointer;border-radius:4px;font-size:0.8rem;color:var(--text-main);';
-        const chip = document.createElement('span');
-        chip.style.cssText = 'background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:10px;font-size:0.7rem;font-weight:500;';
-        chip.textContent = '{ x }';
-        item.appendChild(chip);
-        const label = document.createElement('span');
-        label.textContent = v.label;
-        item.appendChild(label);
-        item.addEventListener('mouseenter', () => { item.style.background = 'var(--bg,#f9fafb)'; });
-        item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
-        item.addEventListener('mousedown', (e) => {
-          e.preventDefault();
-          selectSlashItem(() => insertVariable(v.key, v.label));
-        });
-        slashMenu.appendChild(item);
+        item.className = 'slash-item';
+        item.setAttribute('data-slash-idx', idx);
+        item.innerHTML = `<span class="slash-icon slash-icon-var">{x}</span><div class="slash-item-text"><span class="slash-item-label">${escapeHtmlInline(v.label)}</span><span class="slash-item-desc">${escapeHtmlInline(v.key)}</span></div>`;
+        item.addEventListener('mouseenter', () => { slashHighlightIndex = idx; updateSlashHighlight(); });
+        item.addEventListener('mousedown', (e) => { e.preventDefault(); selectSlashItem(idx); });
+        itemsWrap.appendChild(item);
+        slashItemCallbacks.push(() => insertVariable(v.key, v.label));
       });
     }
 
-    // Text containers section
+    // --- Text Containers ---
     const matchedContainers = textContainers.filter(c => !f || c.name.toLowerCase().includes(f) || (c.category || '').toLowerCase().includes(f));
     if (matchedContainers.length > 0) {
       const heading = document.createElement('div');
-      heading.style.cssText = 'font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-secondary);padding:6px 8px 2px;margin-top:4px;';
+      heading.className = 'slash-section-heading';
       heading.textContent = 'Text Containers';
-      slashMenu.appendChild(heading);
+      itemsWrap.appendChild(heading);
 
       matchedContainers.forEach(c => {
-        hasItems = true;
+        const idx = slashItemCallbacks.length;
         const item = document.createElement('button');
-        item.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:6px 10px;border:none;background:transparent;cursor:pointer;border-radius:4px;font-size:0.8rem;color:var(--text-main);';
-        const icon = document.createElement('span');
-        icon.style.cssText = 'background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:10px;font-size:0.7rem;font-weight:500;';
-        icon.textContent = '📄';
-        item.appendChild(icon);
-        const label = document.createElement('span');
-        label.textContent = c.name;
-        item.appendChild(label);
-        if (c.category) {
-          const badge = document.createElement('span');
-          badge.style.cssText = 'margin-left:auto;font-size:0.6rem;color:var(--text-secondary);';
-          badge.textContent = c.category;
-          item.appendChild(badge);
-        }
-        item.addEventListener('mouseenter', () => { item.style.background = 'var(--bg,#f9fafb)'; });
-        item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
+        item.className = 'slash-item';
+        item.setAttribute('data-slash-idx', idx);
+        let badgeHtml = c.category ? `<span class="slash-item-badge">${escapeHtmlInline(c.category)}</span>` : '';
+        item.innerHTML = `<span class="slash-icon slash-icon-doc">&#128196;</span><div class="slash-item-text"><span class="slash-item-label">${escapeHtmlInline(c.name)}</span>${badgeHtml}</div>`;
+        item.addEventListener('mouseenter', () => { slashHighlightIndex = idx; updateSlashHighlight(); });
         item.addEventListener('mousedown', (e) => {
           e.preventDefault();
-          selectSlashItem(() => {
-            let html = c.content || '';
-            if (isGenerateMode && Object.keys(variableMap).length > 0) {
-              html = resolveVariables(html, variableMap, quoteData);
-              html = resolveChips(html);
-            }
-            quillInstance.clipboard.dangerouslyPasteHTML(quillInstance.getSelection(true).index, html);
-            showToast(`Inserted "${c.name}"`, 'success');
-          });
+          selectSlashItem(idx);
         });
-        slashMenu.appendChild(item);
+        itemsWrap.appendChild(item);
+        slashItemCallbacks.push(() => {
+          let html = c.content || '';
+          if (isGenerateMode && Object.keys(variableMap).length > 0) {
+            html = resolveVariables(html, variableMap, quoteData);
+            html = resolveChips(html);
+          }
+          insertHtmlAtCursor(html);
+          showToast(`Inserted "${c.name}"`, 'success');
+        });
       });
     }
 
-    if (!hasItems) {
+    if (slashItemCallbacks.length === 0) {
       const empty = document.createElement('div');
-      empty.style.cssText = 'padding:12px;text-align:center;color:var(--text-secondary);font-size:0.8rem;';
-      empty.textContent = f ? 'No results' : 'Type to search...';
-      slashMenu.appendChild(empty);
+      empty.className = 'slash-empty';
+      empty.textContent = 'No results';
+      itemsWrap.appendChild(empty);
+    }
+
+    slashMenu.appendChild(itemsWrap);
+    updateSlashHighlight();
+  }
+
+  function updateSlashHighlight() {
+    slashMenu.querySelectorAll('.slash-item').forEach(el => el.classList.remove('slash-item-active'));
+    const active = slashMenu.querySelector(`[data-slash-idx="${slashHighlightIndex}"]`);
+    if (active) {
+      active.classList.add('slash-item-active');
+      active.scrollIntoView({ block: 'nearest' });
     }
   }
 
-  function selectSlashItem(callback) {
+  function selectSlashItem(indexOrCallback) {
+    const callback = typeof indexOrCallback === 'function' ? indexOrCallback : slashItemCallbacks[indexOrCallback];
     // Remove the "/" and any typed filter text from the editor
     if (quillInstance && slashStartIndex >= 0) {
-      const currentIndex = quillInstance.getSelection(true).index;
+      const currentIndex = quillInstance.getSelection(true)?.index ?? slashStartIndex;
       const deleteLen = currentIndex - slashStartIndex;
-      quillInstance.deleteText(slashStartIndex, deleteLen);
-      quillInstance.setSelection(slashStartIndex);
+      if (deleteLen > 0) {
+        quillInstance.deleteText(slashStartIndex, deleteLen);
+        quillInstance.setSelection(slashStartIndex);
+      }
     }
     closeSlashMenu();
-    callback();
+    if (callback) callback();
   }
 
   function openSlashMenu() {
@@ -486,13 +581,23 @@ export function createDocumentEditorView(container, opts = {}) {
     slashMenu.style.left = (editorRect.left + bounds.left) + 'px';
     slashMenu.style.top = (editorRect.top + bounds.top + bounds.height + 4) + 'px';
     slashMenu.style.display = 'block';
+    // Trigger fade-in
+    requestAnimationFrame(() => slashMenu.classList.add('slash-menu-visible'));
   }
 
   function closeSlashMenu() {
+    slashMenu.classList.remove('slash-menu-visible');
     slashMenu.style.display = 'none';
     slashActive = false;
     slashStartIndex = -1;
     slashFilter = '';
+    slashHighlightIndex = 0;
+    slashItemCallbacks = [];
+  }
+
+  /** Inline HTML escape for slash menu items */
+  function escapeHtmlInline(str) {
+    return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   // Show/hide floating toolbar based on selection
@@ -656,24 +761,46 @@ export function createDocumentEditorView(container, opts = {}) {
         return;
       }
 
-      // Detect "/" at current position
+      // Detect "/" at current position — works at any cursor position
       if (range.index > 0) {
         const lastChar = quillInstance.getText(range.index - 1, 1);
         if (lastChar === '/') {
-          // Check it's at start of line or after whitespace
-          const prevChar = range.index > 1 ? quillInstance.getText(range.index - 2, 1) : '\n';
-          if (prevChar === '\n' || prevChar === ' ' || prevChar === '\t' || range.index === 1) {
-            openSlashMenu();
-          }
+          openSlashMenu();
         }
       }
     });
 
-    // Close slash menu on Escape
+    // Slash menu keyboard navigation
     quillInstance.root.addEventListener('keydown', (e) => {
-      if (slashActive && e.key === 'Escape') {
+      if (!slashActive) return;
+
+      if (e.key === 'Escape') {
         e.preventDefault();
         closeSlashMenu();
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (slashItemCallbacks.length > 0) {
+          slashHighlightIndex = (slashHighlightIndex + 1) % slashItemCallbacks.length;
+          updateSlashHighlight();
+        }
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (slashItemCallbacks.length > 0) {
+          slashHighlightIndex = (slashHighlightIndex - 1 + slashItemCallbacks.length) % slashItemCallbacks.length;
+          updateSlashHighlight();
+        }
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (slashItemCallbacks.length > 0) {
+          selectSlashItem(slashHighlightIndex);
+        }
+        return;
       }
     });
   }
@@ -826,14 +953,13 @@ export function createDocumentEditorView(container, opts = {}) {
 
       item.addEventListener('click', () => {
         if (!quillInstance) return;
-        const range = quillInstance.getSelection(true);
         let html = c.content || '';
         // In generate mode, resolve variables before inserting
         if (isGenerateMode && Object.keys(variableMap).length > 0) {
           html = resolveVariables(html, variableMap, quoteData);
           html = resolveChips(html);
         }
-        quillInstance.clipboard.dangerouslyPasteHTML(range.index, html);
+        insertHtmlAtCursor(html);
         showToast(`Inserted "${c.name}"`, 'success');
       });
 
@@ -1058,14 +1184,40 @@ export function createDocumentEditorView(container, opts = {}) {
 
             // GENERATE MODE: resolve variables directly in the HTML before loading
             if (isGenerateMode && Object.keys(variableMap).length > 0) {
-              // Resolve {{mustache}} variables
+              // Handle {{quote.table}} — replace with placeholder, then insert blot after loading
+              const hasQuoteTable = fullHtml.includes('{{quote.table}}') ||
+                fullHtml.includes('data-variable="quote.table"');
+
+              // Remove {{quote.table}} placeholder (will be inserted as blot)
+              fullHtml = fullHtml.replace(/\{\{quote\.table\}\}/g, '');
+
+              // Resolve remaining {{mustache}} variables
               fullHtml = resolveVariables(fullHtml, variableMap, quoteData);
 
               // Resolve variable chips (ql-variable spans) with real values
+              // but preserve quote.table chips for blot insertion
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = fullHtml;
+              tempDiv.querySelectorAll('.ql-variable').forEach(chip => {
+                const key = (chip.getAttribute('data-variable') || '').trim();
+                if (key === 'quote.table') {
+                  chip.remove(); // Will insert blot after
+                }
+              });
+              fullHtml = tempDiv.innerHTML;
               fullHtml = resolveChips(fullHtml);
-            }
 
-            quillInstance.root.innerHTML = fullHtml;
+              quillInstance.root.innerHTML = fullHtml;
+
+              // Insert QuoteTableBlot at end if template had quote.table
+              if (hasQuoteTable) {
+                const len = quillInstance.getLength();
+                const divHtml = renderQuoteTable(quoteData, 'div');
+                quillInstance.insertEmbed(len - 1, 'quotetable', { html: divHtml, mode: 'rendered' });
+              }
+            } else {
+              quillInstance.root.innerHTML = fullHtml;
+            }
           }
         } catch (err) {
           console.error('Failed to load template:', err);
@@ -1405,6 +1557,226 @@ function ensureEditorStyles() {
     .fluid-settings-panel {
       display: flex;
       flex-direction: column;
+    }
+
+    /* ===== Quote Table Embed (div-based grid) ===== */
+    .quote-table-embed {
+      margin: 16px 0;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 0.8rem;
+      color: #374151;
+      user-select: none;
+    }
+    .quote-table-embed .qt-header,
+    .quote-table-embed .qt-row,
+    .quote-table-embed .qt-footer {
+      display: grid;
+      grid-template-columns: 120px 1fr 60px 100px 100px 100px;
+      align-items: center;
+    }
+    .quote-table-embed .qt-header {
+      background: #f9fafb;
+      border-bottom: 2px solid #e5e7eb;
+      font-weight: 600;
+      font-size: 0.75rem;
+      color: #374151;
+    }
+    .quote-table-embed .qt-cell {
+      padding: 8px 12px;
+    }
+    .quote-table-embed .qt-right {
+      text-align: right;
+    }
+    .quote-table-embed .qt-mono {
+      font-family: monospace;
+    }
+    .quote-table-embed .qt-row {
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .quote-table-embed .qt-row:hover {
+      background: #f9fafb;
+    }
+    .quote-table-embed .qt-group-header {
+      padding: 10px 12px;
+      font-weight: 600;
+      background: #f0f0ff;
+      color: #4f46e5;
+      font-size: 0.78rem;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .quote-table-embed .qt-footer {
+      border-top: 2px solid #e5e7eb;
+      font-weight: 600;
+      background: #f9fafb;
+    }
+    .quote-table-embed .qt-span {
+      grid-column: 1 / 6;
+    }
+
+    /* Quote table placeholder (template mode) */
+    .qt-placeholder {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 20px 24px;
+      background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+      border: 2px dashed #a5b4fc;
+      border-radius: 8px;
+      color: #4338ca;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .qt-placeholder-icon {
+      font-size: 1.3rem;
+    }
+    .qt-placeholder-hint {
+      font-weight: 400;
+      font-size: 0.75rem;
+      color: #6366f1;
+      margin-left: auto;
+    }
+
+    /* ===== Slash Command Menu ===== */
+    .slash-menu {
+      display: none;
+      position: fixed;
+      background: var(--surface, #fff);
+      border: 1px solid var(--border, #e5e7eb);
+      border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08);
+      z-index: 70;
+      width: 320px;
+      max-height: 400px;
+      overflow: hidden;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .slash-menu.slash-menu-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .slash-header {
+      padding: 10px 14px 6px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary, #6b7280);
+    }
+    .slash-search-hint {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 14px 8px;
+      font-size: 0.8rem;
+      color: var(--text-main, #111827);
+      border-bottom: 1px solid var(--border, #e5e7eb);
+    }
+    .slash-search-icon {
+      font-size: 0.75rem;
+      opacity: 0.5;
+    }
+    .slash-items {
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 4px;
+    }
+    .slash-section-heading {
+      font-size: 0.63rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary, #6b7280);
+      padding: 8px 10px 3px;
+      margin-top: 2px;
+    }
+    .slash-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      text-align: left;
+      padding: 7px 10px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      color: var(--text-main, #111827);
+      transition: background 0.1s;
+    }
+    .slash-item:hover,
+    .slash-item.slash-item-active {
+      background: var(--bg, #f3f4f6);
+    }
+    .slash-item-special {
+      background: linear-gradient(135deg, #eef2ff 0%, #dbeafe 100%);
+      border: 1px solid #c7d2fe;
+      margin: 4px 0;
+    }
+    .slash-item-special:hover,
+    .slash-item-special.slash-item-active {
+      background: linear-gradient(135deg, #e0e7ff 0%, #bfdbfe 100%);
+    }
+    .slash-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .slash-icon-var {
+      background: #e0e7ff;
+      color: #4338ca;
+      font-family: monospace;
+    }
+    .slash-icon-doc {
+      background: #fef3c7;
+      color: #92400e;
+      font-size: 0.85rem;
+    }
+    .slash-icon-table {
+      background: #dbeafe;
+      color: #1d4ed8;
+      font-size: 1rem;
+    }
+    .slash-item-text {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+      flex: 1;
+    }
+    .slash-item-label {
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .slash-item-desc {
+      font-size: 0.65rem;
+      color: var(--text-secondary, #6b7280);
+      font-family: monospace;
+    }
+    .slash-item-badge {
+      font-size: 0.6rem;
+      color: var(--text-secondary, #6b7280);
+      background: var(--bg, #f3f4f6);
+      padding: 1px 6px;
+      border-radius: 8px;
+    }
+    .slash-empty {
+      padding: 16px;
+      text-align: center;
+      color: var(--text-secondary, #9ca3af);
+      font-size: 0.8rem;
     }
   `;
   document.head.appendChild(style);
