@@ -70,12 +70,19 @@ async function runOpenAIChat({ messages, provider, model, onToken, onToolCall })
   ];
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const stream = await client.chat.completions.create({
-      model,
-      messages: chatMessages,
-      tools: toolDefs.length ? toolDefs : undefined,
-      stream: true,
-    });
+    let stream;
+    try {
+      stream = await client.chat.completions.create({
+        model,
+        messages: chatMessages,
+        tools: toolDefs.length ? toolDefs : undefined,
+        stream: true,
+      });
+    } catch (err) {
+      const msg = err?.message || err?.error?.message || String(err);
+      console.error('OpenAI API error:', msg);
+      throw new Error(`LLM API error: ${msg}`);
+    }
 
     let assistantContent = '';
     const toolCalls = [];

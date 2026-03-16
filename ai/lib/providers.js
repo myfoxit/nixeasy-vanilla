@@ -105,7 +105,7 @@ function getDefaultBaseUrl(type) {
 
 function getDefaultModel(type) {
   switch (type) {
-    case 'openai': return 'gpt-4o';
+    case 'openai': return 'gpt-4o-mini';
     case 'anthropic': return 'claude-sonnet-4-20250514';
     case 'azure': return 'gpt-4o';
     case 'ollama': return 'llama3.2';

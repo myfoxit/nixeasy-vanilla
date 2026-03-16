@@ -101,6 +101,7 @@ app.post('/ai/chat', async (req, res) => {
       return;
     }
 
+    console.log(`Chat request: provider=${provider.name} model=${model || provider.defaultModel} messages=${messages.length}`);
     send('status', { provider: provider.name, model: model || provider.defaultModel });
 
     const result = await runChat({
