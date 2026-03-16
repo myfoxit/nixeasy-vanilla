@@ -282,16 +282,6 @@ export function createWizardConfiguratorView(container, { oppId, quoteId, templa
     const headerRight = document.createElement('div');
     headerRight.style.cssText = 'display:flex;gap:8px;align-items:center;margin-left:auto;';
 
-    // View toggle
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'btn btn-secondary btn-sm';
-    toggleBtn.textContent = 'Grid View';
-    toggleBtn.title = 'Switch to Grid view';
-    toggleBtn.addEventListener('click', () => {
-      if (typeof onSwitchView === 'function') onSwitchView('grid');
-    });
-    headerRight.appendChild(toggleBtn);
-
     // Save
     if (oppId) {
       const saveBtn = document.createElement('button');

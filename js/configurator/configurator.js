@@ -368,16 +368,6 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     const headerRight = document.createElement('div');
     headerRight.style.cssText = 'display:flex;gap:8px;align-items:center;margin-left:auto;';
 
-    // View toggle (Grid ↔ Wizard) — only in quote mode
-    if (!isTemplateMode && typeof onSwitchView === 'function') {
-      const wizardToggle = document.createElement('button');
-      wizardToggle.className = 'btn btn-secondary btn-sm';
-      wizardToggle.textContent = 'Wizard View';
-      wizardToggle.title = 'Switch to Wizard view';
-      wizardToggle.addEventListener('click', () => onSwitchView('wizard'));
-      headerRight.appendChild(wizardToggle);
-    }
-
     if (!isTemplateMode) {
       // Export (normal secondary button)
       const exportTrigger = document.createElement('button');

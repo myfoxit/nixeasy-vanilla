@@ -205,51 +205,23 @@ function registerRoutes(main) {
     return createQuotesListView(container, { oppId: params.oppId });
   });
 
-  // New quote in configurator
+  // New quote in wizard configurator
   addRoute('/opportunities/:oppId/quotes/new', (container, params) => {
-    const basePath = `/opportunities/${params.oppId}/quotes/new`;
-    const useWizard = params.view === 'wizard';
-    const switchView = (view) => navigate(view === 'wizard' ? `${basePath}?view=wizard` : basePath);
-
-    if (useWizard) {
-      return createWizardConfiguratorView(container, {
-        oppId: params.oppId,
-        quoteId: null,
-        templateId: null,
-        onBack: () => navigate(`/opportunities/${params.oppId}/quotes`),
-        onSwitchView: switchView,
-      });
-    }
-    return createConfiguratorView(container, {
+    return createWizardConfiguratorView(container, {
       oppId: params.oppId,
       quoteId: null,
       templateId: null,
       onBack: () => navigate(`/opportunities/${params.oppId}/quotes`),
-      onSwitchView: switchView,
     });
   });
 
-  // Edit existing quote in configurator
+  // Edit existing quote in wizard configurator
   addRoute('/opportunities/:oppId/quotes/:quoteId', (container, params) => {
-    const basePath = `/opportunities/${params.oppId}/quotes/${params.quoteId}`;
-    const useWizard = params.view === 'wizard';
-    const switchView = (view) => navigate(view === 'wizard' ? `${basePath}?view=wizard` : basePath);
-
-    if (useWizard) {
-      return createWizardConfiguratorView(container, {
-        oppId: params.oppId,
-        quoteId: params.quoteId,
-        templateId: null,
-        onBack: () => navigate(`/opportunities/${params.oppId}/quotes`),
-        onSwitchView: switchView,
-      });
-    }
-    return createConfiguratorView(container, {
+    return createWizardConfiguratorView(container, {
       oppId: params.oppId,
       quoteId: params.quoteId,
       templateId: null,
       onBack: () => navigate(`/opportunities/${params.oppId}/quotes`),
-      onSwitchView: switchView,
     });
   });
 
