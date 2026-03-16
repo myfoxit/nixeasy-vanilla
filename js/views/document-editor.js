@@ -700,29 +700,6 @@ export function createDocumentEditorView(container, opts = {}) {
   container.appendChild(root);
 
   // =========================================================================
-  // Page break markers
-  // =========================================================================
-  function updatePageBreaks() {
-    // Remove old markers
-    a4Page.querySelectorAll('.fluid-page-break-line').forEach(el => el.remove());
-
-    // A4 page height = 297mm. Get the page's actual height in px.
-    // The content area starts after padding-top (20mm) and ends before padding-bottom (20mm).
-    // Page breaks occur at multiples of 297mm from the top of the a4Page element.
-    const pageHeightPx = 297 * (96 / 25.4); // 297mm in px at 96dpi ≈ 1123px
-    const totalHeight = a4Page.scrollHeight;
-    const numPages = Math.ceil(totalHeight / pageHeightPx);
-
-    for (let i = 1; i < numPages; i++) {
-      const line = document.createElement('div');
-      line.className = 'fluid-page-break-line';
-      line.style.top = (i * pageHeightPx) + 'px';
-      line.setAttribute('data-page', `Page ${i + 1}`);
-      a4Page.appendChild(line);
-    }
-  }
-
-  // =========================================================================
   // Initialize Quill
   // =========================================================================
   function initQuill() {
@@ -764,8 +741,6 @@ export function createDocumentEditorView(container, opts = {}) {
 
     quillInstance.on('text-change', (delta, oldDelta, source) => {
       floatingToolbar.classList.remove('visible');
-      updatePageBreaks();
-
       if (source !== 'user') return;
 
       // Check for "/" typed
@@ -1258,7 +1233,7 @@ export function createDocumentEditorView(container, opts = {}) {
   // =========================================================================
   initQuill();
   applyPageSettings();
-  loadData().then(() => updatePageBreaks());
+  loadData();
   loadTextContainers();
 
   // =========================================================================
@@ -1370,26 +1345,7 @@ function ensureEditorStyles() {
       background: white;
       color: #111827;
     }
-    /* Page break indicator lines */
-    .fluid-page-break-line {
-      position: absolute;
-      left: 0;
-      right: 0;
-      height: 0;
-      border-top: 2px dashed #d1d5db;
-      pointer-events: none;
-      z-index: 5;
-    }
-    .fluid-page-break-line::after {
-      content: attr(data-page);
-      position: absolute;
-      right: 8px;
-      top: 4px;
-      font-size: 0.6rem;
-      color: #9ca3af;
-      background: white;
-      padding: 0 4px;
-    }
+
 
     /* Quill container fills the page and grows */
     .fluid-quill-container {
