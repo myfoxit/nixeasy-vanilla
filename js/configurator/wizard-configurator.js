@@ -196,6 +196,7 @@ export function createWizardConfiguratorView(container, { oppId, quoteId, templa
       wizardState,
       onStateChange,
       quoteId: qId,
+      oppId,
     };
 
     switch (stepDef.id) {

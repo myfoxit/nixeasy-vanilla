@@ -1,5 +1,6 @@
 // Step 1: Configuration — Browse licenses catalog, add items, set quantities & margins
 
+import { pb } from '../../api.js';
 import { currency } from '../../utils/format.js';
 import { getMeasurePointTag } from '../../utils/license-calculations.js';
 import { showToast } from '../../components/toast.js';
@@ -7,13 +8,59 @@ import { showToast } from '../../components/toast.js';
 const ITEMS_PER_PAGE = 20;
 const DEFAULT_MARGIN = 25;
 
-export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wizardState, onStateChange }) {
+export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wizardState, onStateChange, oppId }) {
   const el = document.createElement('div');
   el.style.cssText = 'display:flex;gap:16px;height:calc(100vh - 280px);min-height:400px;';
 
   let search = '';
   let currentPage = 1;
   let levelFilter = 'ALL'; // ALL, BASE, MODULE, ADDON, DL
+
+  // Host state
+  let hosts = [];
+  let selectedHostId = '';
+  let customerId = null;
+  let showHostModal = false;
+
+  // Load hosts for the opportunity's customer
+  async function loadHosts() {
+    if (!oppId) return;
+    try {
+      const opp = await pb.collection('opportunities').getOne(oppId, { expand: 'customer' });
+      customerId = opp.customer;
+      if (customerId) {
+        const res = await pb.collection('dev_hosts').getFullList({
+          filter: `customer = "${customerId}"`,
+          sort: 'hostname',
+        });
+        hosts = res;
+        if (hosts.length > 0 && !selectedHostId) selectedHostId = hosts[0].id;
+        render();
+      }
+    } catch (err) {
+      console.warn('Failed to load hosts:', err.message);
+    }
+  }
+
+  async function createHost(hostname) {
+    if (!hostname?.trim()) { showToast('Enter a hostname', 'warning'); return; }
+    try {
+      const newHost = await pb.collection('dev_hosts').create({
+        hostname: hostname.trim(),
+        customer: customerId,
+      });
+      hosts = [...hosts, newHost];
+      selectedHostId = newHost.id;
+      showHostModal = false;
+      showToast(`Host "${hostname}" created`, 'success');
+      render();
+    } catch (err) {
+      showToast('Failed to create host: ' + err.message, 'error');
+    }
+  }
+
+  // Start loading hosts
+  loadHosts();
 
   function getFiltered() {
     const q = search.toLowerCase();
@@ -27,24 +74,26 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
 
   function addItem(license) {
     const items = wizardState.lineItems;
-    const existing = items.find(l => l.licenseId === license.id && l.itemType !== 'servicepack');
+    const hostId = selectedHostId || null;
+    const existing = items.find(l => l.licenseId === license.id && l.hostId === hostId && l.itemType !== 'servicepack');
     if (existing) {
       existing.amount = (existing.amount || 1) + 1;
     } else {
-      // Dependency validation — depends_on can be a string ID or array of IDs
+      // Dependency validation — scoped to selected host
+      const hostItems = hostId ? items.filter(l => l.hostId === hostId) : items;
       const deps = license.depends_on;
       const depIds = Array.isArray(deps) ? deps : (deps ? [deps] : []);
       if (depIds.length > 0) {
-        const missingDep = depIds.find(depId => !items.some(l => l.licenseId === depId));
+        const missingDep = depIds.find(depId => !hostItems.some(l => l.licenseId === depId));
         if (missingDep) {
           const depLic = licenses.find(l => l.id === missingDep);
           showToast(`Dependency missing: requires "${depLic?.name || missingDep}"`, 'error');
           return;
         }
       }
-      // Addon must have a parent of same product line
+      // Addon must have a parent of same product line (scoped to host)
       if (license.type === 'ADDON' && license.product) {
-        const hasParent = items.some(l => l.product === license.product && (l.type === 'BASE' || l.type === 'MODULE'));
+        const hasParent = hostItems.some(l => l.product === license.product && (l.type === 'BASE' || l.type === 'MODULE'));
         if (!hasParent) {
           showToast(`Add "${license.product}" base or module first`, 'error');
           return;
@@ -64,16 +113,17 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
         serviceMargin: 20,
         itemType: 'license',
         containerId: null,
+        hostId: hostId,
         _order: items.length,
         type: license.type || '',
         product: license.product || '',
       };
 
-      // Flat-tree insertion: place after last item of same product line
+      // Flat-tree insertion: place after last item of same product line on same host
       if (license.product) {
         let insertIdx = -1;
         for (let i = items.length - 1; i >= 0; i--) {
-          if (items[i].product === license.product && items[i].itemType !== 'servicepack') {
+          if (items[i].product === license.product && items[i].hostId === hostId && items[i].itemType !== 'servicepack') {
             insertIdx = i;
             break;
           }
@@ -107,6 +157,7 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
     let hk = 0, vk = 0;
     for (const item of wizardState.lineItems) {
       if (item.itemType === 'servicepack') continue;
+      // Show totals for ALL items, not just selected host
       const lineHk = item.price * item.amount;
       const lineVk = lineHk * (1 + (item.margin || 0) / 100);
       hk += lineHk;
@@ -234,7 +285,12 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
     if (!itemsBodyEl) return;
     itemsBodyEl.innerHTML = '';
 
-    const licenseItems = wizardState.lineItems.filter(l => l.itemType !== 'servicepack');
+    // Filter by selected host if hosts exist
+    const licenseItems = wizardState.lineItems.filter(l => {
+      if (l.itemType === 'servicepack') return false;
+      if (hosts.length > 0 && selectedHostId) return l.hostId === selectedHostId;
+      return true;
+    });
 
     if (licenseItems.length === 0) {
       const emptyRow = document.createElement('tr');
@@ -403,6 +459,11 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
   }
 
   function render() {
+    // Clean up any modal overlay
+    if (el._modalOverlay && el._modalOverlay.parentNode) {
+      el._modalOverlay.remove();
+      el._modalOverlay = null;
+    }
     el.innerHTML = '';
 
     // Left: Catalog
@@ -459,12 +520,101 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
     totalsEl.style.cssText = 'display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;';
     rightPanel.appendChild(totalsEl);
 
-    // Items header
+    // Host selector bar
+    if (hosts.length > 0 || oppId) {
+      const hostBar = document.createElement('div');
+      hostBar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg);';
+
+      const hostLabel = document.createElement('span');
+      hostLabel.style.cssText = 'font-size:0.75rem;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.03em;';
+      hostLabel.textContent = 'Host:';
+      hostBar.appendChild(hostLabel);
+
+      const hostTabs = document.createElement('div');
+      hostTabs.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;flex:1;';
+
+      hosts.forEach(h => {
+        const tab = document.createElement('button');
+        const isActive = selectedHostId === h.id;
+        const itemCount = wizardState.lineItems.filter(l => l.hostId === h.id && l.itemType !== 'servicepack').length;
+        tab.style.cssText = `padding:4px 12px;border:1px solid ${isActive ? 'var(--primary)' : 'var(--border)'};border-radius:4px;font-size:0.75rem;font-weight:${isActive ? '600' : '500'};cursor:pointer;transition:all 0.15s;background:${isActive ? 'var(--primary)' : 'var(--surface)'};color:${isActive ? 'white' : 'var(--text-main)'};`;
+        tab.textContent = h.hostname + (itemCount ? ` (${itemCount})` : '');
+        tab.addEventListener('click', () => { selectedHostId = h.id; render(); });
+        hostTabs.appendChild(tab);
+      });
+      hostBar.appendChild(hostTabs);
+
+      const addHostBtn = document.createElement('button');
+      addHostBtn.style.cssText = 'padding:4px 10px;border:1px dashed var(--border);border-radius:4px;font-size:0.75rem;cursor:pointer;background:transparent;color:var(--text-secondary);transition:all 0.15s;white-space:nowrap;';
+      addHostBtn.textContent = '+ Add Host';
+      addHostBtn.addEventListener('mouseenter', () => { addHostBtn.style.borderColor = 'var(--primary)'; addHostBtn.style.color = 'var(--primary)'; });
+      addHostBtn.addEventListener('mouseleave', () => { addHostBtn.style.borderColor = 'var(--border)'; addHostBtn.style.color = 'var(--text-secondary)'; });
+      addHostBtn.addEventListener('click', () => { showHostModal = true; render(); });
+      hostBar.appendChild(addHostBtn);
+
+      rightPanel.appendChild(hostBar);
+    }
+
+    // Host creation modal (inline)
+    if (showHostModal) {
+      const modalOverlay = document.createElement('div');
+      modalOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:100;display:flex;align-items:center;justify-content:center;';
+      modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) { showHostModal = false; render(); } });
+
+      const modal = document.createElement('div');
+      modal.style.cssText = 'background:var(--surface);border-radius:8px;padding:20px;width:340px;box-shadow:0 10px 40px rgba(0,0,0,0.2);';
+
+      const modalTitle = document.createElement('h4');
+      modalTitle.style.cssText = 'margin:0 0 12px;font-size:0.95rem;';
+      modalTitle.textContent = 'Create New Host';
+      modal.appendChild(modalTitle);
+
+      const hostInput = document.createElement('input');
+      hostInput.type = 'text';
+      hostInput.placeholder = 'Hostname (e.g. srv-prod-01)';
+      hostInput.style.cssText = 'width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;margin-bottom:12px;background:var(--surface);color:var(--text-main);';
+      modal.appendChild(hostInput);
+
+      const modalActions = document.createElement('div');
+      modalActions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn btn-secondary btn-sm';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', () => { showHostModal = false; render(); });
+      modalActions.appendChild(cancelBtn);
+
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'btn btn-primary btn-sm';
+      saveBtn.textContent = 'Create';
+      saveBtn.addEventListener('click', () => createHost(hostInput.value));
+      modalActions.appendChild(saveBtn);
+
+      hostInput.addEventListener('keydown', e => { if (e.key === 'Enter') createHost(hostInput.value); });
+
+      modal.appendChild(modalActions);
+      modalOverlay.appendChild(modal);
+      document.body.appendChild(modalOverlay);
+
+      // Auto-focus
+      requestAnimationFrame(() => hostInput.focus());
+
+      // Store ref for cleanup
+      el._modalOverlay = modalOverlay;
+    }
+
+    // Items header — show host name if selected
     const tableHeader = document.createElement('div');
     tableHeader.style.cssText = 'padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;';
     const headerTitle = document.createElement('h4');
     headerTitle.style.cssText = 'margin:0;font-size:0.95rem;color:var(--text-main);';
-    headerTitle.textContent = `Configuration Items (${wizardState.lineItems.filter(l => l.itemType !== 'servicepack').length})`;
+    const selectedHost = hosts.find(h => h.id === selectedHostId);
+    const hostItemCount = selectedHostId
+      ? wizardState.lineItems.filter(l => l.hostId === selectedHostId && l.itemType !== 'servicepack').length
+      : wizardState.lineItems.filter(l => l.itemType !== 'servicepack').length;
+    headerTitle.textContent = selectedHost
+      ? `${selectedHost.hostname} — Items (${hostItemCount})`
+      : `Configuration Items (${hostItemCount})`;
     tableHeader.appendChild(headerTitle);
     rightPanel.appendChild(tableHeader);
 
