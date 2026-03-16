@@ -1,0 +1,10 @@
+# PocketBase local data
+pb_data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
