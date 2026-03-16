@@ -36,7 +36,7 @@ const DEFAULT_MARGIN = 25;
  * @param {Function}     opts.onBack       - Navigate back callback
  * @returns {{ destroy: Function }}
  */
-export function createConfiguratorView(container, { oppId, quoteId, templateId, onBack }) {
+export function createConfiguratorView(container, { oppId, quoteId, templateId, onBack, onSwitchView }) {
   container.innerHTML = '';
   const hourlyRate = 150;
   const licenses = getState('licenses') || [];
@@ -367,6 +367,16 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     // Actions (pushed to the right via margin-left:auto)
     const headerRight = document.createElement('div');
     headerRight.style.cssText = 'display:flex;gap:8px;align-items:center;margin-left:auto;';
+
+    // View toggle (Grid ↔ Wizard) — only in quote mode
+    if (!isTemplateMode && typeof onSwitchView === 'function') {
+      const wizardToggle = document.createElement('button');
+      wizardToggle.className = 'btn btn-secondary btn-sm';
+      wizardToggle.textContent = 'Wizard View';
+      wizardToggle.title = 'Switch to Wizard view';
+      wizardToggle.addEventListener('click', () => onSwitchView('wizard'));
+      headerRight.appendChild(wizardToggle);
+    }
 
     if (!isTemplateMode) {
       // Export (normal secondary button)

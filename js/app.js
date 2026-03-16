@@ -16,6 +16,7 @@ import { createMeasurePointTemplatesView } from './views/measure-point-templates
 import { createMeasurePointCalculatorView } from './views/measure-point-calculator.js';
 import { createInstalledBaseView } from './views/installed-base.js';
 import { createConfiguratorView } from './configurator/configurator.js';
+import { createWizardConfiguratorView } from './configurator/wizard-configurator.js';
 import { initCommandPalette } from './components/command-palette.js';
 import { createChatFAB } from './components/chat-panel.js';
 import { createAiSettingsView } from './views/ai-settings.js';
@@ -206,21 +207,49 @@ function registerRoutes(main) {
 
   // New quote in configurator
   addRoute('/opportunities/:oppId/quotes/new', (container, params) => {
+    const basePath = `/opportunities/${params.oppId}/quotes/new`;
+    const useWizard = params.view === 'wizard';
+    const switchView = (view) => navigate(view === 'wizard' ? `${basePath}?view=wizard` : basePath);
+
+    if (useWizard) {
+      return createWizardConfiguratorView(container, {
+        oppId: params.oppId,
+        quoteId: null,
+        templateId: null,
+        onBack: () => navigate(`/opportunities/${params.oppId}/quotes`),
+        onSwitchView: switchView,
+      });
+    }
     return createConfiguratorView(container, {
       oppId: params.oppId,
       quoteId: null,
       templateId: null,
       onBack: () => navigate(`/opportunities/${params.oppId}/quotes`),
+      onSwitchView: switchView,
     });
   });
 
   // Edit existing quote in configurator
   addRoute('/opportunities/:oppId/quotes/:quoteId', (container, params) => {
+    const basePath = `/opportunities/${params.oppId}/quotes/${params.quoteId}`;
+    const useWizard = params.view === 'wizard';
+    const switchView = (view) => navigate(view === 'wizard' ? `${basePath}?view=wizard` : basePath);
+
+    if (useWizard) {
+      return createWizardConfiguratorView(container, {
+        oppId: params.oppId,
+        quoteId: params.quoteId,
+        templateId: null,
+        onBack: () => navigate(`/opportunities/${params.oppId}/quotes`),
+        onSwitchView: switchView,
+      });
+    }
     return createConfiguratorView(container, {
       oppId: params.oppId,
       quoteId: params.quoteId,
       templateId: null,
       onBack: () => navigate(`/opportunities/${params.oppId}/quotes`),
+      onSwitchView: switchView,
     });
   });
 
