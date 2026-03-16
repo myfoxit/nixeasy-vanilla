@@ -364,18 +364,15 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
 
     headerTop.appendChild(headerLeft);
 
-    // Right actions (always visible, right-aligned)
+    // Right actions (right-aligned via space-between on parent)
     const headerRight = document.createElement('div');
-    headerRight.className = 'flex gap-2';
-    headerRight.style.cssText = 'align-items:center;margin-left:auto;';
+    headerRight.style.cssText = 'display:flex;gap:8px;align-items:center;';
 
     if (!isTemplateMode) {
-      // Export (ghost button)
+      // Export (normal secondary button)
       const exportTrigger = document.createElement('button');
-      exportTrigger.style.cssText = 'background:transparent;border:none;font-size:0.85rem;padding:6px 12px;cursor:pointer;color:var(--text-secondary);border-radius:6px;transition:background 0.15s;font-weight:500;';
+      exportTrigger.className = 'btn btn-secondary btn-sm';
       exportTrigger.textContent = 'Export';
-      exportTrigger.addEventListener('mouseenter', () => { exportTrigger.style.background = 'var(--hover-bg, #f3f4f6)'; });
-      exportTrigger.addEventListener('mouseleave', () => { exportTrigger.style.background = 'transparent'; });
       exportPopoverInstance = createPopover({ trigger: exportTrigger, content: () => buildExportContent(), align: 'right', width: 280 });
       headerRight.appendChild(exportPopoverInstance.element);
 
@@ -399,10 +396,10 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       savePopoverInstance = createPopover({ trigger: saveAnchor, content: () => buildSaveTemplateContent(), align: 'right', width: 320 });
       headerRight.appendChild(savePopoverInstance.element);
 
-      // More menu (⋮ ghost button) — contains Load Template, Save as Template, Duplicate, History
+      // More menu (ghost button: "More ⋮") — contains Load Template, Save as Template, Duplicate, History
       const moreTrigger = document.createElement('button');
-      moreTrigger.style.cssText = 'background:transparent;border:none;font-size:1.2rem;padding:6px 8px;cursor:pointer;color:var(--text-secondary);line-height:1;border-radius:6px;transition:background 0.15s;';
-      moreTrigger.innerHTML = '⋮';
+      moreTrigger.style.cssText = 'background:transparent;border:none;font-size:0.85rem;padding:6px 10px;cursor:pointer;color:var(--text-secondary);line-height:1;border-radius:6px;transition:background 0.15s;font-weight:500;display:flex;align-items:center;gap:4px;';
+      moreTrigger.innerHTML = 'More <span style="font-size:1.1rem;line-height:1;">⋮</span>';
       moreTrigger.title = 'More actions';
       moreTrigger.addEventListener('mouseenter', () => { moreTrigger.style.background = 'var(--hover-bg, #f3f4f6)'; });
       moreTrigger.addEventListener('mouseleave', () => { moreTrigger.style.background = 'transparent'; });
