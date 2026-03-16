@@ -128,11 +128,7 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       if ((al.amount || 1) !== (bl.amount || 1))
         changes.push({ action: 'qty_changed', sku: al.sku || '', name: al.name, old: bl.amount, new: al.amount });
 
-      if (al.sla !== bl.sla) {
-        const oldName = _slas.find(s => s.id === bl.sla)?.name || bl.sla || 'None';
-        const newName = _slas.find(s => s.id === al.sla)?.name || al.sla || 'None';
-        changes.push({ action: 'sla_changed', sku: al.sku || '', name: al.name, old: oldName, new: newName });
-      }
+      // SLA changes are not tracked in changelog (intentional)
     }
 
     // Group name changes
@@ -163,15 +159,8 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
     });
   }
 
-  let _autoSaveTimer = null;
-  function triggerAutoSave() {
-    clearTimeout(_autoSaveTimer);
-    _autoSaveTimer = setTimeout(() => save(), 1200);
-  }
-
   function onSummaryChange(summary) {
     if (summaryCardInstance) summaryCardInstance.update(summary);
-    triggerAutoSave();
   }
 
   // ======================================================

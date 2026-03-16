@@ -195,14 +195,6 @@ export function createChangelogPanel({ quoteId, onClose }) {
             `<span style="text-decoration:line-through;color:var(--text-secondary);">${Number(c.old).toFixed(1)}%</span>` +
             ` → <strong>${Number(c.new).toFixed(1)}%</strong>` };
 
-      case 'sla_changed':
-        return { icon: '◈', color: '#7c3aed',
-          html: `${skuSpan}${nameB} SLA ${old} → ${neu}` };
-
-      case 'qty_changed':
-        return { icon: '#', color: '#0369a1',
-          html: `${skuSpan}${nameB} qty ${old} → ${neu}` };
-
       case 'group_renamed':
         return { icon: '▤', color: '#7c3aed',
           html: `Group renamed ${old} → ${neu}` };
