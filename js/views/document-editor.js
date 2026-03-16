@@ -96,6 +96,56 @@ export function createDocumentEditorView(container, opts = {}) {
   const headerActions = document.createElement('div');
   headerActions.style.cssText = 'display:flex;align-items:center;gap:8px;margin-left:auto;';
 
+  // Insert Variable button (always visible in header)
+  const headerVarWrap = document.createElement('div');
+  headerVarWrap.style.cssText = 'position:relative;';
+  const headerVarBtn = document.createElement('button');
+  headerVarBtn.className = 'btn btn-secondary btn-sm';
+  headerVarBtn.innerHTML = '&#123; x &#125; Insert Variable';
+  headerVarBtn.addEventListener('click', () => toggleHeaderVarDropdown());
+  headerVarWrap.appendChild(headerVarBtn);
+
+  const headerVarDropdown = document.createElement('div');
+  headerVarDropdown.style.cssText = 'display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:60;width:280px;max-height:360px;overflow-y:auto;padding:8px;';
+  headerVarWrap.appendChild(headerVarDropdown);
+  headerActions.appendChild(headerVarWrap);
+
+  function toggleHeaderVarDropdown() {
+    if (headerVarDropdown.style.display === 'none') {
+      headerVarDropdown.innerHTML = '';
+      const groups = getAvailableVariables();
+      groups.forEach(group => {
+        const groupLabel = document.createElement('div');
+        groupLabel.style.cssText = 'font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-secondary);padding:6px 8px 2px;';
+        groupLabel.textContent = group.group;
+        headerVarDropdown.appendChild(groupLabel);
+        group.vars.forEach(v => {
+          const item = document.createElement('button');
+          item.style.cssText = 'display:block;width:100%;text-align:left;padding:6px 8px;border:none;background:transparent;cursor:pointer;border-radius:4px;font-size:0.8rem;color:var(--text-main);';
+          item.textContent = v.label;
+          item.title = `{{${v.key}}}`;
+          item.addEventListener('mouseenter', () => { item.style.background = 'var(--bg)'; });
+          item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
+          item.addEventListener('click', () => {
+            insertVariable(v.key, v.label);
+            headerVarDropdown.style.display = 'none';
+          });
+          headerVarDropdown.appendChild(item);
+        });
+      });
+      headerVarDropdown.style.display = 'block';
+    } else {
+      headerVarDropdown.style.display = 'none';
+    }
+  }
+
+  // Close header var dropdown on outside click
+  document.addEventListener('click', (e) => {
+    if (!headerVarWrap.contains(e.target)) {
+      headerVarDropdown.style.display = 'none';
+    }
+  });
+
   const saveBtn = document.createElement('button');
   saveBtn.className = 'btn btn-secondary btn-sm';
   saveBtn.textContent = 'Save';
