@@ -220,6 +220,10 @@ export function createStepSla({ wizardState, onStateChange }) {
         wizardState.lineItems[realIdx].sla = e.target.value;
         wizardState.lineItems[realIdx].slaName = sla?.name || '';
         wizardState.lineItems[realIdx].slaMonthly = sla?.monthly_percentage || 0;
+        // Set service margin from global if it's still at default
+        if (wizardState.lineItems[realIdx].serviceMargin === 20) {
+          wizardState.lineItems[realIdx].serviceMargin = globalServiceMargin;
+        }
         onStateChange();
         render();
       });

@@ -6,7 +6,7 @@ function uid() {
   try { return uid(); } catch { return 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 }
 
-export function createStepDesign({ wizardState, onStateChange }) {
+export function createStepDesign({ wizardState, onStateChange, hourlyRate }) {
   const el = document.createElement('div');
   el.style.cssText = 'display:flex;flex-direction:column;gap:16px;height:calc(100vh - 280px);min-height:400px;';
 
@@ -22,13 +22,18 @@ export function createStepDesign({ wizardState, onStateChange }) {
   // All line items as source items with available qty tracking
   function getSourceItems() {
     const items = [];
+    const hr = hourlyRate || 150;
     for (const li of wizardState.lineItems) {
       const id = li.licenseId ? `lic_${li.licenseId}` : `sp_${li.servicePackId}`;
+      // Services use hours * hourlyRate, licenses use price
+      const unitPrice = li.itemType === 'servicepack'
+        ? (li.hours || 0) * hr
+        : (li.price || 0);
       items.push({
         id,
         name: li.name || li.sku,
         totalQty: li.amount,
-        unitPrice: li.price || 0,
+        unitPrice,
         margin: li.margin || 0,
         itemType: li.itemType,
       });
