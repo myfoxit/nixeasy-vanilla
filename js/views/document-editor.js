@@ -337,15 +337,24 @@ export function createDocumentEditorView(container, opts = {}) {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
     tempDiv.querySelectorAll('.ql-variable').forEach(chip => {
-      const key = chip.getAttribute('data-variable');
+      const key = (chip.getAttribute('data-variable') || '').trim();
       if (key === 'quote.table') {
         const tableHtml = resolveVariables('{{quote.table}}', variableMap, quoteData);
         const wrapper = document.createElement('div');
         wrapper.innerHTML = tableHtml;
         chip.replaceWith(...wrapper.childNodes);
+      } else if (variableMap[key]) {
+        chip.replaceWith(document.createTextNode(variableMap[key]));
       } else {
-        const resolved = variableMap[key] || chip.textContent;
-        chip.replaceWith(document.createTextNode(resolved));
+        // Try resolving as mustache in case it's a special variable
+        const resolved = resolveVariables(`{{${key}}}`, variableMap, quoteData);
+        if (resolved !== `{{${key}}}`) {
+          const wrapper = document.createElement('div');
+          wrapper.innerHTML = resolved;
+          chip.replaceWith(...wrapper.childNodes);
+        } else {
+          chip.replaceWith(document.createTextNode(chip.textContent));
+        }
       }
     });
     return tempDiv.innerHTML;
@@ -956,14 +965,7 @@ export function createDocumentEditorView(container, opts = {}) {
     let html = quillInstance.root.innerHTML;
 
     // Replace variable chips with resolved values
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-    tempDiv.querySelectorAll('.ql-variable').forEach(chip => {
-      const key = chip.getAttribute('data-variable');
-      const resolved = variableMap[key] || chip.textContent;
-      chip.replaceWith(document.createTextNode(resolved));
-    });
-    html = tempDiv.innerHTML;
+    html = resolveChips(html);
 
     // Resolve any remaining {{mustache}} variables
     if (Object.keys(variableMap).length > 0) {
