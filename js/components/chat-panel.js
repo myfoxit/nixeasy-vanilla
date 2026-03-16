@@ -451,6 +451,70 @@ async function sendMessage(input) {
     let bubbleEl = null;
     let currentEventType = '';
 
+    const processBlock = (block) => {
+      let eventType = '';
+      let dataStr = '';
+
+      for (const line of block.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('event:')) {
+          eventType = trimmed.slice(trimmed.indexOf(':') + 1).trim();
+        } else if (trimmed.startsWith('data:')) {
+          dataStr = trimmed.slice(trimmed.indexOf(':') + 1).trim();
+        }
+      }
+
+      if (!dataStr) return;
+
+      let data;
+      try { data = JSON.parse(dataStr); } catch { return; }
+
+      if (eventType === 'status') {
+        currentProvider = data;
+      } else if (eventType === 'token') {
+        if (typingEl.parentNode) typingEl.remove();
+
+        assistantMsg.content += data.token;
+
+        if (!bubbleEl) {
+          bubbleEl = document.createElement('div');
+          bubbleEl.className = 'chat-bubble assistant';
+          container.appendChild(bubbleEl);
+        }
+        bubbleEl.innerHTML = renderMarkdown(assistantMsg.content);
+        container.scrollTop = container.scrollHeight;
+      } else if (eventType === 'tool') {
+        if (typingEl.parentNode) typingEl.remove();
+
+        assistantMsg.toolCalls.push({
+          name: data.name,
+          args: data.args,
+          summary: `${getToolIcon(data.name)} ${formatToolName(data.name)}${data.resultCount !== undefined ? ` (${data.resultCount})` : ''}`,
+        });
+
+        const wrap = document.createElement('div');
+        wrap.style.alignSelf = 'flex-start';
+        const chip = document.createElement('button');
+        chip.className = 'chat-tool-chip';
+        chip.textContent = assistantMsg.toolCalls[assistantMsg.toolCalls.length - 1].summary;
+        const detail = document.createElement('div');
+        detail.className = 'chat-tool-detail';
+        detail.textContent = JSON.stringify(data.args, null, 2);
+        chip.addEventListener('click', () => detail.classList.toggle('open'));
+        wrap.appendChild(chip);
+        wrap.appendChild(detail);
+        container.appendChild(wrap);
+        container.scrollTop = container.scrollHeight;
+      } else if (eventType === 'error') {
+        if (typingEl.parentNode) typingEl.remove();
+        messages.push({ role: 'error', content: data.error });
+        const errBubble = document.createElement('div');
+        errBubble.className = 'chat-bubble error';
+        errBubble.textContent = data.error;
+        container.appendChild(errBubble);
+      }
+    };
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -460,71 +524,14 @@ async function sendMessage(input) {
       // SSE events are separated by double newlines
       let sepIdx;
       while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
-        const block = buffer.slice(0, sepIdx);
+        processBlock(buffer.slice(0, sepIdx));
         buffer = buffer.slice(sepIdx + 2);
-
-        let eventType = '';
-        let dataStr = '';
-
-        for (const line of block.split('\n')) {
-          if (line.startsWith('event: ') || line.startsWith('event:')) {
-            eventType = line.slice(line.indexOf(':') + 1).trim();
-          } else if (line.startsWith('data: ') || line.startsWith('data:')) {
-            dataStr = line.slice(line.indexOf(':') + 1).trim();
-          }
-        }
-
-        if (!dataStr) continue;
-
-        let data;
-        try { data = JSON.parse(dataStr); } catch { continue; }
-
-        if (eventType === 'status') {
-          currentProvider = data;
-        } else if (eventType === 'token') {
-          if (typingEl.parentNode) typingEl.remove();
-
-          assistantMsg.content += data.token;
-
-          if (!bubbleEl) {
-            bubbleEl = document.createElement('div');
-            bubbleEl.className = 'chat-bubble assistant';
-            container.appendChild(bubbleEl);
-          }
-          bubbleEl.innerHTML = renderMarkdown(assistantMsg.content);
-          container.scrollTop = container.scrollHeight;
-        } else if (eventType === 'tool') {
-          if (typingEl.parentNode) typingEl.remove();
-
-          assistantMsg.toolCalls.push({
-            name: data.name,
-            args: data.args,
-            summary: `${getToolIcon(data.name)} ${formatToolName(data.name)}${data.resultCount !== undefined ? ` (${data.resultCount})` : ''}`,
-          });
-
-          const wrap = document.createElement('div');
-          wrap.style.alignSelf = 'flex-start';
-          const chip = document.createElement('button');
-          chip.className = 'chat-tool-chip';
-          chip.textContent = assistantMsg.toolCalls[assistantMsg.toolCalls.length - 1].summary;
-          const detail = document.createElement('div');
-          detail.className = 'chat-tool-detail';
-          detail.textContent = JSON.stringify(data.args, null, 2);
-          chip.addEventListener('click', () => detail.classList.toggle('open'));
-          wrap.appendChild(chip);
-          wrap.appendChild(detail);
-          container.appendChild(wrap);
-          container.scrollTop = container.scrollHeight;
-        } else if (eventType === 'error') {
-          if (typingEl.parentNode) typingEl.remove();
-          messages.push({ role: 'error', content: data.error });
-          const errBubble = document.createElement('div');
-          errBubble.className = 'chat-bubble error';
-          errBubble.textContent = data.error;
-          container.appendChild(errBubble);
-        }
-        // 'done' event — just let it pass
       }
+    }
+
+    // Process any remaining data in buffer after stream ends
+    if (buffer.trim()) {
+      processBlock(buffer);
     }
 
     if (typingEl.parentNode) typingEl.remove();

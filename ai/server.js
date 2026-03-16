@@ -10,6 +10,7 @@ import {
 import { runChat } from './lib/chat.js';
 
 const app = express();
+app.disable('etag');
 app.use(express.json());
 
 // ---------------------------------------------------------------------------
@@ -87,6 +88,7 @@ app.post('/ai/chat', async (req, res) => {
 
   const send = (event, data) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    if (typeof res.flush === 'function') res.flush();
   };
 
   let closed = false;
