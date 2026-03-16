@@ -464,6 +464,7 @@ async function sendMessage(input) {
         }
       }
 
+      console.log('[chat-sse]', eventType, dataStr?.slice(0, 80));
       if (!dataStr) return;
 
       let data;
@@ -515,11 +516,14 @@ async function sendMessage(input) {
       }
     };
 
+    console.log('[chat] Starting SSE stream read');
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) { console.log('[chat] Stream done, buffer remaining:', buffer.length); break; }
 
-      buffer += decoder.decode(value, { stream: true });
+      const chunk = decoder.decode(value, { stream: true });
+      console.log('[chat] Chunk received:', chunk.length, 'bytes:', chunk.slice(0, 100));
+      buffer += chunk;
 
       // SSE events are separated by double newlines
       let sepIdx;
