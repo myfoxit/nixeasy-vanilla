@@ -88,29 +88,37 @@ async function runOpenAIChat({ messages, provider, model, onToken, onToolCall })
     const toolCalls = [];
     const toolCallBuffers = {};
 
-    for await (const chunk of stream) {
-      const delta = chunk.choices?.[0]?.delta;
-      if (!delta) continue;
+    try {
+      for await (const chunk of stream) {
+        const delta = chunk.choices?.[0]?.delta;
+        if (!delta) continue;
 
-      // Text content
-      if (delta.content) {
-        assistantContent += delta.content;
-        onToken?.(delta.content);
-      }
+        // Text content
+        if (delta.content) {
+          assistantContent += delta.content;
+          onToken?.(delta.content);
+        }
 
-      // Tool calls
-      if (delta.tool_calls) {
-        for (const tc of delta.tool_calls) {
-          if (!toolCallBuffers[tc.index]) {
-            toolCallBuffers[tc.index] = { id: '', name: '', arguments: '' };
+        // Tool calls
+        if (delta.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            if (!toolCallBuffers[tc.index]) {
+              toolCallBuffers[tc.index] = { id: '', name: '', arguments: '' };
+            }
+            const buf = toolCallBuffers[tc.index];
+            if (tc.id) buf.id = tc.id;
+            if (tc.function?.name) buf.name = tc.function.name;
+            if (tc.function?.arguments) buf.arguments += tc.function.arguments;
           }
-          const buf = toolCallBuffers[tc.index];
-          if (tc.id) buf.id = tc.id;
-          if (tc.function?.name) buf.name = tc.function.name;
-          if (tc.function?.arguments) buf.arguments += tc.function.arguments;
         }
       }
+    } catch (streamErr) {
+      const msg = streamErr?.message || String(streamErr);
+      console.error('OpenAI stream error:', msg);
+      throw new Error(`Stream error: ${msg}`);
     }
+
+    console.log(`Round ${round}: content=${assistantContent.length}chars toolCalls=${Object.keys(toolCallBuffers).length}`);
 
     // Collect finished tool calls
     for (const idx of Object.keys(toolCallBuffers).sort((a, b) => a - b)) {
