@@ -316,8 +316,174 @@ export function createDocumentEditorView(container, opts = {}) {
   function insertVariable(key, label) {
     if (!quillInstance) return;
     const range = quillInstance.getSelection(true);
-    quillInstance.insertEmbed(range.index, 'variable', { key, label });
-    quillInstance.setSelection(range.index + 1);
+    if (isGenerateMode) {
+      // In generate mode, insert resolved value directly (or table HTML)
+      if (key === 'quote.table') {
+        const tableHtml = resolveVariables('{{quote.table}}', variableMap, quoteData);
+        quillInstance.clipboard.dangerouslyPasteHTML(range.index, tableHtml);
+      } else {
+        const resolved = variableMap[key] || `{{${key}}}`;
+        quillInstance.insertText(range.index, resolved);
+        quillInstance.setSelection(range.index + resolved.length);
+      }
+    } else {
+      quillInstance.insertEmbed(range.index, 'variable', { key, label });
+      quillInstance.setSelection(range.index + 1);
+    }
+  }
+
+  /** Resolve .ql-variable chips in HTML string to real values */
+  function resolveChips(html) {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    tempDiv.querySelectorAll('.ql-variable').forEach(chip => {
+      const key = chip.getAttribute('data-variable');
+      if (key === 'quote.table') {
+        const tableHtml = resolveVariables('{{quote.table}}', variableMap, quoteData);
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = tableHtml;
+        chip.replaceWith(...wrapper.childNodes);
+      } else {
+        const resolved = variableMap[key] || chip.textContent;
+        chip.replaceWith(document.createTextNode(resolved));
+      }
+    });
+    return tempDiv.innerHTML;
+  }
+
+  // =========================================================================
+  // Slash command menu (/ to insert variables and text containers)
+  // =========================================================================
+  const slashMenu = document.createElement('div');
+  slashMenu.style.cssText = 'display:none;position:fixed;background:var(--surface,#fff);border:1px solid var(--border,#e5e7eb);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:70;width:300px;max-height:320px;overflow-y:auto;padding:4px;';
+  document.body.appendChild(slashMenu);
+
+  let slashActive = false;
+  let slashStartIndex = -1;
+  let slashFilter = '';
+
+  function buildSlashItems(filter) {
+    slashMenu.innerHTML = '';
+    const f = (filter || '').toLowerCase();
+    let hasItems = false;
+
+    // Variables section
+    const varGroups = getAvailableVariables();
+    const flatVars = varGroups.flatMap(g => g.vars.map(v => ({ ...v, group: g.group })));
+    const matchedVars = flatVars.filter(v => !f || v.label.toLowerCase().includes(f) || v.key.toLowerCase().includes(f));
+
+    if (matchedVars.length > 0) {
+      const heading = document.createElement('div');
+      heading.style.cssText = 'font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-secondary);padding:6px 8px 2px;';
+      heading.textContent = 'Variables';
+      slashMenu.appendChild(heading);
+
+      matchedVars.forEach(v => {
+        hasItems = true;
+        const item = document.createElement('button');
+        item.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:6px 10px;border:none;background:transparent;cursor:pointer;border-radius:4px;font-size:0.8rem;color:var(--text-main);';
+        const chip = document.createElement('span');
+        chip.style.cssText = 'background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:10px;font-size:0.7rem;font-weight:500;';
+        chip.textContent = '{ x }';
+        item.appendChild(chip);
+        const label = document.createElement('span');
+        label.textContent = v.label;
+        item.appendChild(label);
+        item.addEventListener('mouseenter', () => { item.style.background = 'var(--bg,#f9fafb)'; });
+        item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          selectSlashItem(() => insertVariable(v.key, v.label));
+        });
+        slashMenu.appendChild(item);
+      });
+    }
+
+    // Text containers section
+    const matchedContainers = textContainers.filter(c => !f || c.name.toLowerCase().includes(f) || (c.category || '').toLowerCase().includes(f));
+    if (matchedContainers.length > 0) {
+      const heading = document.createElement('div');
+      heading.style.cssText = 'font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-secondary);padding:6px 8px 2px;margin-top:4px;';
+      heading.textContent = 'Text Containers';
+      slashMenu.appendChild(heading);
+
+      matchedContainers.forEach(c => {
+        hasItems = true;
+        const item = document.createElement('button');
+        item.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:6px 10px;border:none;background:transparent;cursor:pointer;border-radius:4px;font-size:0.8rem;color:var(--text-main);';
+        const icon = document.createElement('span');
+        icon.style.cssText = 'background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:10px;font-size:0.7rem;font-weight:500;';
+        icon.textContent = '📄';
+        item.appendChild(icon);
+        const label = document.createElement('span');
+        label.textContent = c.name;
+        item.appendChild(label);
+        if (c.category) {
+          const badge = document.createElement('span');
+          badge.style.cssText = 'margin-left:auto;font-size:0.6rem;color:var(--text-secondary);';
+          badge.textContent = c.category;
+          item.appendChild(badge);
+        }
+        item.addEventListener('mouseenter', () => { item.style.background = 'var(--bg,#f9fafb)'; });
+        item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          selectSlashItem(() => {
+            let html = c.content || '';
+            if (isGenerateMode && Object.keys(variableMap).length > 0) {
+              html = resolveVariables(html, variableMap, quoteData);
+              html = resolveChips(html);
+            }
+            quillInstance.clipboard.dangerouslyPasteHTML(quillInstance.getSelection(true).index, html);
+            showToast(`Inserted "${c.name}"`, 'success');
+          });
+        });
+        slashMenu.appendChild(item);
+      });
+    }
+
+    if (!hasItems) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'padding:12px;text-align:center;color:var(--text-secondary);font-size:0.8rem;';
+      empty.textContent = f ? 'No results' : 'Type to search...';
+      slashMenu.appendChild(empty);
+    }
+  }
+
+  function selectSlashItem(callback) {
+    // Remove the "/" and any typed filter text from the editor
+    if (quillInstance && slashStartIndex >= 0) {
+      const currentIndex = quillInstance.getSelection(true).index;
+      const deleteLen = currentIndex - slashStartIndex;
+      quillInstance.deleteText(slashStartIndex, deleteLen);
+      quillInstance.setSelection(slashStartIndex);
+    }
+    closeSlashMenu();
+    callback();
+  }
+
+  function openSlashMenu() {
+    if (!quillInstance) return;
+    const range = quillInstance.getSelection();
+    if (!range) return;
+    slashStartIndex = range.index;
+    slashActive = true;
+    slashFilter = '';
+    buildSlashItems('');
+
+    // Position below cursor
+    const bounds = quillInstance.getBounds(range.index);
+    const editorRect = quillInstance.root.closest('.fluid-a4-page').getBoundingClientRect();
+    slashMenu.style.left = (editorRect.left + bounds.left) + 'px';
+    slashMenu.style.top = (editorRect.top + bounds.top + bounds.height + 4) + 'px';
+    slashMenu.style.display = 'block';
+  }
+
+  function closeSlashMenu() {
+    slashMenu.style.display = 'none';
+    slashActive = false;
+    slashStartIndex = -1;
+    slashFilter = '';
   }
 
   // Show/hide floating toolbar based on selection
@@ -451,10 +617,55 @@ export function createDocumentEditorView(container, opts = {}) {
       },
     });
 
-    quillInstance.on('selection-change', updateFloatingToolbar);
-    quillInstance.on('text-change', () => {
-      // Hide toolbar on text changes to avoid stale position
+    quillInstance.on('selection-change', (range) => {
+      updateFloatingToolbar();
+      // Close slash menu if cursor moves away
+      if (slashActive && range && range.index < slashStartIndex) {
+        closeSlashMenu();
+      }
+    });
+
+    quillInstance.on('text-change', (delta, oldDelta, source) => {
       floatingToolbar.classList.remove('visible');
+
+      if (source !== 'user') return;
+
+      // Check for "/" typed
+      const range = quillInstance.getSelection();
+      if (!range) return;
+
+      if (slashActive) {
+        // Update filter based on text after "/"
+        const text = quillInstance.getText(slashStartIndex, range.index - slashStartIndex);
+        if (text.includes('\n') || text.includes(' ')) {
+          closeSlashMenu();
+        } else {
+          // Remove leading "/" from filter
+          slashFilter = text.startsWith('/') ? text.slice(1) : text;
+          buildSlashItems(slashFilter);
+        }
+        return;
+      }
+
+      // Detect "/" at current position
+      if (range.index > 0) {
+        const lastChar = quillInstance.getText(range.index - 1, 1);
+        if (lastChar === '/') {
+          // Check it's at start of line or after whitespace
+          const prevChar = range.index > 1 ? quillInstance.getText(range.index - 2, 1) : '\n';
+          if (prevChar === '\n' || prevChar === ' ' || prevChar === '\t' || range.index === 1) {
+            openSlashMenu();
+          }
+        }
+      }
+    });
+
+    // Close slash menu on Escape
+    quillInstance.root.addEventListener('keydown', (e) => {
+      if (slashActive && e.key === 'Escape') {
+        e.preventDefault();
+        closeSlashMenu();
+      }
     });
   }
 
@@ -611,15 +822,7 @@ export function createDocumentEditorView(container, opts = {}) {
         // In generate mode, resolve variables before inserting
         if (isGenerateMode && Object.keys(variableMap).length > 0) {
           html = resolveVariables(html, variableMap, quoteData);
-          // Also resolve any variable chip spans
-          const tmp = document.createElement('div');
-          tmp.innerHTML = html;
-          tmp.querySelectorAll('.ql-variable').forEach(chip => {
-            const key = chip.getAttribute('data-variable');
-            const resolved = variableMap[key] || chip.textContent;
-            chip.replaceWith(document.createTextNode(resolved));
-          });
-          html = tmp.innerHTML;
+          html = resolveChips(html);
         }
         quillInstance.clipboard.dangerouslyPasteHTML(range.index, html);
         showToast(`Inserted "${c.name}"`, 'success');
@@ -857,14 +1060,7 @@ export function createDocumentEditorView(container, opts = {}) {
               fullHtml = resolveVariables(fullHtml, variableMap, quoteData);
 
               // Resolve variable chips (ql-variable spans) with real values
-              const tempDiv = document.createElement('div');
-              tempDiv.innerHTML = fullHtml;
-              tempDiv.querySelectorAll('.ql-variable').forEach(chip => {
-                const key = chip.getAttribute('data-variable');
-                const resolved = variableMap[key] || chip.textContent;
-                chip.replaceWith(document.createTextNode(resolved));
-              });
-              fullHtml = tempDiv.innerHTML;
+              fullHtml = resolveChips(fullHtml);
             }
 
             quillInstance.root.innerHTML = fullHtml;
@@ -895,6 +1091,7 @@ export function createDocumentEditorView(container, opts = {}) {
       destroyed = true;
       if (floatingToolbar.parentNode) floatingToolbar.parentNode.removeChild(floatingToolbar);
       if (varDropdown.parentNode) varDropdown.parentNode.removeChild(varDropdown);
+      if (slashMenu.parentNode) slashMenu.parentNode.removeChild(slashMenu);
       container.innerHTML = '';
     },
   };

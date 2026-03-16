@@ -84,7 +84,12 @@ function renderQuoteTable(quoteData) {
   if (!quoteData) return '<p><em>No quote data available</em></p>';
 
   const groups = quoteData.groups || [];
-  const lineItems = quoteData.lineItems || [];
+  // Support both flat lineItems array and groups[].lines[] structure
+  let lineItems = quoteData.lineItems || [];
+  if (lineItems.length === 0 && groups.length > 0) {
+    // Extract line items from groups
+    lineItems = groups.flatMap(g => (g.lines || []).map(li => ({ ...li, groupId: g.id || g.name })));
+  }
 
   if (lineItems.length === 0) return '<p><em>No line items</em></p>';
 
@@ -104,7 +109,10 @@ function renderQuoteTable(quoteData) {
 
   // Group items by group
   const groupMap = new Map();
-  groups.forEach(g => groupMap.set(g.id, g));
+  groups.forEach(g => {
+    if (g.id) groupMap.set(g.id, g);
+    if (g.name) groupMap.set(g.name, g);
+  });
 
   // If groups exist, render by group
   if (groups.length > 0) {
