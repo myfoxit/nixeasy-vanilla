@@ -19,6 +19,10 @@ import { createConfiguratorView } from './configurator/configurator.js';
 import { initCommandPalette } from './components/command-palette.js';
 import { createChatFAB } from './components/chat-panel.js';
 import { createAiSettingsView } from './views/ai-settings.js';
+import { createTextContainersView } from './views/text-containers.js';
+import { createDocumentTemplatesView } from './views/document-templates.js';
+import { createTemplateBuilderView } from './views/template-builder.js';
+import { createPdfGeneratorView } from './views/pdf-generator.js';
 
 // ---------------------------------------------------------------------------
 // Theme initialisation (before first paint)
@@ -222,6 +226,26 @@ function registerRoutes(main) {
   // AI Settings
   addRoute('/ai-settings', (container) => {
     return createAiSettingsView(container);
+  });
+
+  // Text Containers
+  addRoute('/text-containers', (container) => {
+    return createTextContainersView(container);
+  });
+
+  // Document Templates list
+  addRoute('/document-templates', (container) => {
+    return createDocumentTemplatesView(container);
+  });
+
+  // Document Template Builder
+  addRoute('/document-templates/:templateId', (container, params) => {
+    return createTemplateBuilderView(container, { templateId: params.templateId });
+  });
+
+  // PDF Generator
+  addRoute('/pdf-generator', (container) => {
+    return createPdfGeneratorView(container);
   });
 }
 

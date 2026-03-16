@@ -624,6 +624,48 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       }
     ];
 
+    // PDF from template option
+    if (oppId && qId) {
+      const pdfBtn = document.createElement('button');
+      pdfBtn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:transparent;cursor:pointer;border-radius:6px;font-size:0.875rem;text-align:left;transition:background 0.1s;';
+      pdfBtn.addEventListener('mouseenter', () => { pdfBtn.style.background = '#f3f4f6'; });
+      pdfBtn.addEventListener('mouseleave', () => { pdfBtn.style.background = 'transparent'; });
+      pdfBtn.addEventListener('click', () => {
+        if (exportPopoverInstance) exportPopoverInstance.close();
+        navigate(`/pdf-generator?opportunityId=${oppId}&quoteId=${qId}`);
+      });
+
+      const pdfSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      pdfSvg.setAttribute('fill', 'none');
+      pdfSvg.setAttribute('viewBox', '0 0 24 24');
+      pdfSvg.setAttribute('stroke-width', '1.5');
+      pdfSvg.setAttribute('stroke', 'currentColor');
+      pdfSvg.style.cssText = 'width:20px;height:20px;color:#dc2626;';
+      const pdfPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      pdfPath.setAttribute('stroke-linecap', 'round');
+      pdfPath.setAttribute('stroke-linejoin', 'round');
+      pdfPath.setAttribute('d', 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z');
+      pdfSvg.appendChild(pdfPath);
+      pdfBtn.appendChild(pdfSvg);
+
+      const pdfText = document.createElement('div');
+      const pdfName = document.createElement('div');
+      pdfName.style.fontWeight = '500';
+      pdfName.textContent = 'PDF from Template';
+      const pdfDesc = document.createElement('div');
+      pdfDesc.style.cssText = 'font-size:0.75rem;color:#6b7280;';
+      pdfDesc.textContent = 'Generate PDF with document template';
+      pdfText.appendChild(pdfName);
+      pdfText.appendChild(pdfDesc);
+      pdfBtn.appendChild(pdfText);
+      div.appendChild(pdfBtn);
+
+      // Separator
+      const sep = document.createElement('div');
+      sep.style.cssText = 'height:1px;background:#f3f4f6;margin:4px 8px;';
+      div.appendChild(sep);
+    }
+
     formats.forEach(f => {
       const btn = document.createElement('button');
       btn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:transparent;cursor:pointer;border-radius:6px;font-size:0.875rem;text-align:left;transition:background 0.1s;';
