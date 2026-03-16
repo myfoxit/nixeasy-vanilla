@@ -3,7 +3,7 @@
 
 import { pb } from './api.js';
 import { setState } from './state.js';
-import { initRouter, addRoute, navigate } from './router.js';
+import { initRouter, addRoute, navigate, clearRoutes } from './router.js';
 import { initToasts } from './components/toast.js';
 import { createSidebar } from './components/sidebar.js';
 import { createLoginView } from './views/login.js';
@@ -121,6 +121,7 @@ function showAppShell() {
   createChatFAB();
 
   // --- Register routes ---
+  clearRoutes();
   registerRoutes(main);
 
   // Start router

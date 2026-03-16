@@ -1,13 +1,22 @@
 // Hash-based router supporting patterns like #/opportunities/:oppId/quotes/:quoteId
 
-const routes = [];
+let routes = [];
 let currentCleanup = null;
 let container = null;
+let listening = false;
 
 export function initRouter(containerEl) {
   container = containerEl;
-  window.addEventListener('hashchange', handleRoute);
+  if (!listening) {
+    window.addEventListener('hashchange', handleRoute);
+    listening = true;
+  }
   handleRoute();
+}
+
+/** Clear all registered routes (call before re-registering on shell rebuild). */
+export function clearRoutes() {
+  routes = [];
 }
 
 export function addRoute(pattern, handler) {
