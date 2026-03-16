@@ -19,9 +19,10 @@ import { createConfiguratorView } from './configurator/configurator.js';
 import { initCommandPalette } from './components/command-palette.js';
 import { createChatFAB } from './components/chat-panel.js';
 import { createAiSettingsView } from './views/ai-settings.js';
-import { createDocumentEditorView } from './views/document-editor.js';
-import { createDocumentListView } from './views/document-list.js';
-import { createTextContainersView } from './views/text-containers.js';
+// TODO: Documents feature — hidden until production-ready
+// import { createDocumentEditorView } from './views/document-editor.js';
+// import { createDocumentListView } from './views/document-list.js';
+// import { createTextContainersView } from './views/text-containers.js';
 
 // ---------------------------------------------------------------------------
 // Theme initialisation (before first paint)
@@ -228,25 +229,11 @@ function registerRoutes(main) {
     return createAiSettingsView(container);
   });
 
-  // Document templates list
-  addRoute('/documents', (container) => {
-    return createDocumentListView(container);
-  });
-
-  // New document editor
-  addRoute('/documents/new', (container) => {
-    return createDocumentEditorView(container);
-  });
-
-  // Edit existing document
-  addRoute('/documents/:templateId', (container, params) => {
-    return createDocumentEditorView(container, { templateId: params.templateId });
-  });
-
-  // Text containers list
-  addRoute('/text-containers', (container) => {
-    return createTextContainersView(container);
-  });
+  // TODO: Documents feature — hidden until production-ready
+  // addRoute('/documents', (container) => createDocumentListView(container));
+  // addRoute('/documents/new', (container) => createDocumentEditorView(container));
+  // addRoute('/documents/:templateId', (container, params) => createDocumentEditorView(container, { templateId: params.templateId }));
+  // addRoute('/text-containers', (container) => createTextContainersView(container));
 }
 
 // ---------------------------------------------------------------------------

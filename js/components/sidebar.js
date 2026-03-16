@@ -63,15 +63,16 @@ const NAV_SECTIONS = [
       { key: 'templates', label: 'Templates', icon: 'templates', route: '/templates' },
     ],
   },
-  {
-    title: 'Documents',
-    items: [
-      { key: 'documents', label: 'Documents', icon: 'documents', route: '/documents',
-        isActive: (path) => path.startsWith('/documents') },
-      { key: 'textContainers', label: 'Text Containers', icon: 'templates', route: '/text-containers',
-        isActive: (path) => path.startsWith('/text-containers') },
-    ],
-  },
+  // TODO: Documents feature — hidden until pagination/editor is production-ready
+  // {
+  //   title: 'Documents',
+  //   items: [
+  //     { key: 'documents', label: 'Documents', icon: 'documents', route: '/documents',
+  //       isActive: (path) => path.startsWith('/documents') },
+  //     { key: 'textContainers', label: 'Text Containers', icon: 'templates', route: '/text-containers',
+  //       isActive: (path) => path.startsWith('/text-containers') },
+  //   ],
+  // },
   {
     title: 'AI',
     items: [

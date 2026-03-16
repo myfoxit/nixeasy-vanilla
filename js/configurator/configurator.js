@@ -624,8 +624,8 @@ export function createConfiguratorView(container, { oppId, quoteId, templateId, 
       }
     ];
 
-    // PDF from template option
-    if (oppId && qId) {
+    // TODO: Documents feature — hidden until production-ready
+    if (false && oppId && qId) {
       const pdfBtn = document.createElement('button');
       pdfBtn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:transparent;cursor:pointer;border-radius:6px;font-size:0.875rem;text-align:left;transition:background 0.1s;';
       pdfBtn.addEventListener('mouseenter', () => { pdfBtn.style.background = '#f3f4f6'; });
