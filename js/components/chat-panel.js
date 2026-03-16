@@ -441,9 +441,23 @@ async function sendMessage(input) {
       body: JSON.stringify({ messages: apiMessages }),
     });
 
+    console.log('[chat] Response:', res.status, res.headers.get('content-type'), 'body:', !!res.body);
+
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
+      const errText = await res.text();
+      console.error('[chat] Error response:', errText);
+      throw new Error(`HTTP ${res.status}: ${errText}`);
     }
+
+    // Try reading as text first to debug
+    if (!res.body || !res.body.getReader) {
+      const text = await res.text();
+      console.log('[chat] No streaming support, full response:', text);
+      // Parse events from full text
+      for (const block of text.split('\n\n')) {
+        processBlock(block);
+      }
+    } else {
 
     // Parse SSE stream
     const reader = res.body.getReader();
@@ -538,6 +552,8 @@ async function sendMessage(input) {
     if (buffer.trim()) {
       processBlock(buffer);
     }
+
+    } // end streaming else
 
     if (typingEl.parentNode) typingEl.remove();
     if (assistantMsg.content || assistantMsg.toolCalls.length) {
