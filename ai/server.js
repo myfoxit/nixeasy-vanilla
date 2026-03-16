@@ -110,7 +110,6 @@ app.post('/ai/chat', async (req, res) => {
     console.log(`Chat request: provider=${provider.name} model=${model || provider.defaultModel} messages=${messages.length}`);
     await send('status', { provider: provider.name, model: model || provider.defaultModel });
     // Debug: test if subsequent writes reach the client
-    await send('token', { token: 'Thinking...' });
     console.log('Debug token sent, starting LLM call...');
 
     const result = await runChat({
