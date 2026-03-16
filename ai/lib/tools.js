@@ -32,6 +32,25 @@ async function pbPatch(path, body) {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve an opportunity number (e.g. "1000049113") to a PocketBase record ID.
+ * If the input is already a valid record ID, returns it as-is.
+ */
+async function resolveOpportunityId(idOrNumber) {
+  try {
+    await pbGet(`collections/opportunities/records/${idOrNumber}`);
+    return idOrNumber; // It's a valid record ID
+  } catch {
+    const data = await pbGet(`collections/opportunities/records?filter=opportunity="${idOrNumber}"&perPage=1`);
+    if (!data.items?.length) throw new Error(`Opportunity "${idOrNumber}" not found`);
+    return data.items[0].id;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Tool definitions
 // ---------------------------------------------------------------------------
 
@@ -107,16 +126,8 @@ const tools = [
       required: ['id'],
     },
     execute: async ({ id }) => {
-      let o;
-      try {
-        // Try direct record ID first
-        o = await pbGet(`collections/opportunities/records/${id}?expand=customer`);
-      } catch {
-        // Fall back to searching by opportunity number field
-        const data = await pbGet(`collections/opportunities/records?filter=opportunity="${id}"&expand=customer&perPage=1`);
-        if (!data.items?.length) throw new Error(`Opportunity "${id}" not found`);
-        o = data.items[0];
-      }
+      const recordId = await resolveOpportunityId(id);
+      const o = await pbGet(`collections/opportunities/records/${recordId}?expand=customer`);
       return {
         id: o.id, opportunity: o.opportunity, title: o.title, status: o.status,
         capex: o.capex, opex_monthly: o.opex_monthly, contract_term_months: o.contract_term_months,
@@ -126,16 +137,19 @@ const tools = [
   },
   {
     name: 'list_quotes',
-    description: 'List quotes, optionally filtered by opportunity ID.',
+    description: 'List quotes, optionally filtered by opportunity record ID or opportunity number.',
     parameters: {
       type: 'object',
       properties: {
-        opportunityId: { type: 'string', description: 'Filter by opportunity ID' },
+        opportunityId: { type: 'string', description: 'Opportunity record ID or opportunity number (e.g. "1000049113")' },
       },
     },
     execute: async ({ opportunityId }) => {
       const params = new URLSearchParams({ sort: '-created', perPage: '200', expand: 'opportunity,created_by' });
-      if (opportunityId) params.set('filter', `opportunity = "${opportunityId}"`);
+      if (opportunityId) {
+        const recordId = await resolveOpportunityId(opportunityId);
+        params.set('filter', `opportunity = "${recordId}"`);
+      }
       const data = await pbGet(`collections/quotes/records?${params}`);
       return data.items.map(q => {
         const qd = q.quote_data || {};
@@ -181,15 +195,7 @@ const tools = [
       required: ['opportunityId'],
     },
     execute: async ({ opportunityId, name }) => {
-      // Resolve opportunity number to record ID if needed
-      let recordId = opportunityId;
-      try {
-        await pbGet(`collections/opportunities/records/${opportunityId}`);
-      } catch {
-        const data = await pbGet(`collections/opportunities/records?filter=opportunity="${opportunityId}"&perPage=1`);
-        if (!data.items?.length) throw new Error(`Opportunity "${opportunityId}" not found`);
-        recordId = data.items[0].id;
-      }
+      const recordId = await resolveOpportunityId(opportunityId);
       const quote_data = {
         name: name || 'New Quote',
         groups: [{ name: 'Default', items: [] }],
