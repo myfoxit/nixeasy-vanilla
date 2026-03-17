@@ -397,7 +397,7 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
 
         // SKU — with indent
         const tdSku = document.createElement('td');
-        tdSku.style.cssText = 'padding:8px 12px;font-family:monospace;font-size:0.8rem;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+        tdSku.style.cssText = 'padding:6px 8px;font-family:monospace;font-size:0.72rem;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
         if (depth > 0) {
           const indent = document.createElement('span');
           indent.style.cssText = `display:inline-block;width:${depth * 20}px;position:relative;`;
@@ -414,7 +414,7 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
 
         // Name — with type badge dot
         const tdName = document.createElement('td');
-        tdName.style.cssText = 'padding:8px 12px;font-weight:500;font-size:0.875rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        tdName.style.cssText = 'padding:6px 8px;font-weight:500;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         const tc = TYPE_COLORS[item.type] || TYPE_COLORS.BASE;
         const typeDot = document.createElement('span');
         typeDot.style.cssText = `display:inline-block;width:8px;height:8px;border-radius:50%;background:${tc.color};margin-right:6px;vertical-align:middle;flex-shrink:0;`;
@@ -429,36 +429,36 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
 
         // Qty
         const tdQty = document.createElement('td');
-        tdQty.style.cssText = 'padding:8px 6px;';
+        tdQty.style.cssText = 'padding:6px 4px;';
         const qtyInput = document.createElement('input');
         qtyInput.type = 'number';
         qtyInput.min = '1';
         qtyInput.value = item.amount;
-        qtyInput.style.cssText = 'width:100%;box-sizing:border-box;text-align:center;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:0.85rem;background:var(--surface);color:var(--text-main);';
+        qtyInput.style.cssText = 'width:100%;box-sizing:border-box;text-align:center;padding:3px 2px;border:1px solid var(--border);border-radius:4px;font-size:0.8rem;background:var(--surface);color:var(--text-main);';
         qtyInput.addEventListener('change', e => updateItem(realIdx, 'amount', Math.max(1, parseInt(e.target.value) || 1)));
         tdQty.appendChild(qtyInput);
         tr.appendChild(tdQty);
 
         // Unit Price
         const tdPrice = document.createElement('td');
-        tdPrice.style.cssText = 'padding:8px 6px;';
+        tdPrice.style.cssText = 'padding:6px 4px;';
         const priceInput = document.createElement('input');
         priceInput.type = 'number';
         priceInput.step = '0.01';
         priceInput.value = item.price;
-        priceInput.style.cssText = 'width:100%;box-sizing:border-box;text-align:right;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:0.85rem;background:var(--surface);color:var(--text-main);';
+        priceInput.style.cssText = 'width:100%;box-sizing:border-box;text-align:right;padding:3px 4px;border:1px solid var(--border);border-radius:4px;font-size:0.8rem;background:var(--surface);color:var(--text-main);';
         priceInput.addEventListener('change', e => updateItem(realIdx, 'price', parseFloat(e.target.value) || 0));
         tdPrice.appendChild(priceInput);
         tr.appendChild(tdPrice);
 
         // Margin %
         const tdMargin = document.createElement('td');
-        tdMargin.style.cssText = 'padding:8px 6px;';
+        tdMargin.style.cssText = 'padding:6px 4px;';
         const marginInput = document.createElement('input');
         marginInput.type = 'number';
         marginInput.step = '0.1';
         marginInput.value = item.margin;
-        marginInput.style.cssText = 'width:100%;box-sizing:border-box;text-align:center;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:0.85rem;background:var(--surface);color:var(--text-main);';
+        marginInput.style.cssText = 'width:100%;box-sizing:border-box;text-align:center;padding:3px 2px;border:1px solid var(--border);border-radius:4px;font-size:0.8rem;background:var(--surface);color:var(--text-main);';
         marginInput.addEventListener('change', e => updateItem(realIdx, 'margin', parseFloat(e.target.value) || 0));
         tdMargin.appendChild(marginInput);
         tr.appendChild(tdMargin);
@@ -466,20 +466,20 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
         // Total HK
         const lineHk = item.price * item.amount;
         const tdHk = document.createElement('td');
-        tdHk.style.cssText = 'padding:8px 12px;text-align:right;font-size:0.85rem;color:var(--text-secondary);';
+        tdHk.style.cssText = 'padding:6px 6px;text-align:right;font-size:0.8rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         tdHk.textContent = currency(lineHk);
         tr.appendChild(tdHk);
 
         // Total VK
         const lineVk = lineHk * (1 + (item.margin || 0) / 100);
         const tdVk = document.createElement('td');
-        tdVk.style.cssText = 'padding:8px 12px;text-align:right;font-weight:600;font-size:0.85rem;';
+        tdVk.style.cssText = 'padding:6px 6px;text-align:right;font-weight:600;font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         tdVk.textContent = currency(lineVk);
         tr.appendChild(tdVk);
 
         // Actions
         const tdAct = document.createElement('td');
-        tdAct.style.cssText = 'padding:8px 6px;text-align:center;';
+        tdAct.style.cssText = 'padding:6px 4px;text-align:center;';
         const delBtn = document.createElement('button');
         delBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px;border-radius:4px;transition:all 0.15s;';
         delBtn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
@@ -743,14 +743,14 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
 
     const thead = document.createElement('thead');
     thead.innerHTML = `<tr style="background:var(--bg);position:sticky;top:0;z-index:1;">
-      <th style="padding:8px 12px;text-align:left;font-size:0.7rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;width:18%;">SKU</th>
-      <th style="padding:8px 12px;text-align:left;font-size:0.7rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;">Name</th>
-      <th style="padding:8px 6px;text-align:center;font-size:0.7rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;width:72px;">Qty</th>
-      <th style="padding:8px 6px;text-align:right;font-size:0.7rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;width:102px;">Unit Price</th>
-      <th style="padding:8px 6px;text-align:center;font-size:0.7rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;width:72px;">Margin %</th>
-      <th style="padding:8px 12px;text-align:right;font-size:0.7rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;width:100px;">Total HK</th>
-      <th style="padding:8px 12px;text-align:right;font-size:0.7rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;width:100px;">Total VK</th>
-      <th style="padding:8px 6px;width:40px;"></th>
+      <th style="padding:6px 8px;text-align:left;font-size:0.65rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;width:16%;">SKU</th>
+      <th style="padding:6px 8px;text-align:left;font-size:0.65rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;">Name</th>
+      <th style="padding:6px 4px;text-align:center;font-size:0.65rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;width:50px;">Qty</th>
+      <th style="padding:6px 4px;text-align:right;font-size:0.65rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;width:80px;">Unit Price</th>
+      <th style="padding:6px 4px;text-align:center;font-size:0.65rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;width:56px;">Margin</th>
+      <th style="padding:6px 6px;text-align:right;font-size:0.65rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;width:82px;">Total HK</th>
+      <th style="padding:6px 6px;text-align:right;font-size:0.65rem;text-transform:uppercase;color:var(--text-secondary);font-weight:600;width:82px;">Total VK</th>
+      <th style="padding:6px 4px;width:32px;"></th>
     </tr>`;
     table.appendChild(thead);
 
