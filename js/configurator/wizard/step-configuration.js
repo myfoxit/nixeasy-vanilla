@@ -523,6 +523,97 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
       (vk > 0 ? ((vk - hk) / vk * 100).toFixed(1) : '0.0') + '%';
   }
 
+  // ── Measure Point Calculator ─────────────────────────
+  function addMeasurePointLicenses(distributions) {
+    const hostId = selectedHostId || null;
+    distributions.forEach(dist => {
+      const lic = licenses.find(l => l.id === dist.licenseId);
+      if (!lic) return;
+      const existing = wizardState.lineItems.find(
+        l => l.licenseId === lic.id && l.hostId === hostId && l.itemType !== 'servicepack'
+      );
+      if (existing) {
+        existing.amount = (existing.amount || 1) + (dist.quantity || 1);
+      } else {
+        wizardState.lineItems.push({
+          licenseId: lic.id,
+          name: lic.name,
+          sku: lic.sku,
+          price: lic.initial_price || 0,
+          amount: dist.quantity || 1,
+          margin: DEFAULT_MARGIN,
+          sla: '',
+          slaName: '',
+          slaMonthly: 0,
+          serviceMargin: 20,
+          itemType: 'license',
+          containerId: null,
+          hostId: hostId,
+          _order: wizardState.lineItems.length,
+          type: lic.type || '',
+          product: lic.product || '',
+        });
+      }
+    });
+    onStateChange();
+    render();
+  }
+
+  function openMeasurePointCalculator() {
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;animation:pe-fadeIn 0.15s ease-out;';
+
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--surface);border-radius:12px;width:90vw;max-width:1000px;height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.2);overflow:hidden;';
+    card.addEventListener('click', e => e.stopPropagation());
+
+    const modalHeader = document.createElement('div');
+    modalHeader.style.cssText = 'padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;justify-content:space-between;align-items:center;';
+    const headerLeft = document.createElement('div');
+    headerLeft.innerHTML = '<h3 style="margin:0;font-size:1rem;">Measure Point Calculator</h3><span style="font-size:0.8rem;color:var(--text-secondary);">Add devices, calculate measure points, and generate licenses</span>';
+    modalHeader.appendChild(headerLeft);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'btn btn-ghost';
+    closeBtn.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:20px;height:20px;"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>';
+    closeBtn.addEventListener('click', () => closeModal());
+    modalHeader.appendChild(closeBtn);
+    card.appendChild(modalHeader);
+
+    const modalBody = document.createElement('div');
+    modalBody.style.cssText = 'flex:1;overflow:hidden;padding:16px;';
+    let calcCleanup = null;
+
+    (async () => {
+      try {
+        const { createMeasurePointCalculatorView } = await import('../../views/measure-point-calculator.js');
+        const res = createMeasurePointCalculatorView(modalBody, {
+          embedded: true,
+          licenses,
+          onApplyLicenses: distribution => {
+            addMeasurePointLicenses(distribution);
+            closeModal();
+          },
+          onClose: () => closeModal(),
+        });
+        if (res?.destroy) calcCleanup = res.destroy;
+      } catch (err) {
+        console.warn('MeasurePointCalculatorView not available:', err);
+        modalBody.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary);">Measure Point Calculator not available.</div>';
+      }
+    })();
+
+    card.appendChild(modalBody);
+    backdrop.appendChild(card);
+    backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
+    document.body.appendChild(backdrop);
+
+    function closeModal() {
+      if (calcCleanup) calcCleanup();
+      if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    }
+  }
+
   function render() {
     el.innerHTML = '';
 
@@ -532,10 +623,24 @@ export function createStepConfiguration({ licenses, servicePacks, hourlyRate, wi
 
     const catalogHeader = document.createElement('div');
     catalogHeader.style.cssText = 'padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;';
+
+    const catalogTitleRow = document.createElement('div');
+    catalogTitleRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;';
     const catalogTitle = document.createElement('h4');
-    catalogTitle.style.cssText = 'margin:0 0 8px 0;font-size:0.95rem;color:var(--text-main);';
+    catalogTitle.style.cssText = 'margin:0;font-size:0.95rem;color:var(--text-main);';
     catalogTitle.textContent = 'License Catalog';
-    catalogHeader.appendChild(catalogTitle);
+    catalogTitleRow.appendChild(catalogTitle);
+
+    // Measure Point Calculator button
+    const mpCalcBtn = document.createElement('button');
+    mpCalcBtn.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid var(--border);border-radius:5px;font-size:0.68rem;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text-secondary);transition:all 0.15s;white-space:nowrap;';
+    mpCalcBtn.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:13px;height:13px;flex-shrink:0;"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008zm0 2.25h.008v.008H8.25V13.5zm0 2.25h.008v.008H8.25v-.008zm0 2.25h.008v.008H8.25V18zm2.498-6.75h.007v.008h-.007v-.008zm0 2.25h.007v.008h-.007V13.5zm0 2.25h.007v.008h-.007v-.008zm0 2.25h.007v.008h-.007V18zm2.504-6.75h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V13.5zm0 2.25h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V18zm2.498-6.75h.008v.008H15.75v-.008zm0 2.25h.008v.008H15.75V13.5zM8.25 6h7.5v2.25h-7.5V6zM12 2.25c-1.892 0-3.758.11-5.593.322C5.307 2.7 4.5 3.65 4.5 4.757V19.5a2.25 2.25 0 002.25 2.25h10.5a2.25 2.25 0 002.25-2.25V4.757c0-1.108-.806-2.057-1.907-2.185A48.507 48.507 0 0012 2.25z"/></svg> MP Calculator';
+    mpCalcBtn.addEventListener('mouseenter', () => { mpCalcBtn.style.borderColor = 'var(--primary)'; mpCalcBtn.style.color = 'var(--primary)'; });
+    mpCalcBtn.addEventListener('mouseleave', () => { mpCalcBtn.style.borderColor = 'var(--border)'; mpCalcBtn.style.color = 'var(--text-secondary)'; });
+    mpCalcBtn.addEventListener('click', () => openMeasurePointCalculator());
+    catalogTitleRow.appendChild(mpCalcBtn);
+
+    catalogHeader.appendChild(catalogTitleRow);
 
     // Level filter tabs
     const filterRow = document.createElement('div');
