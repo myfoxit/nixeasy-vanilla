@@ -55,9 +55,25 @@ export function createStepSummary({ wizardState, hourlyRate, quoteId }) {
     return [headerRow, ...dataRows].join('\n');
   }
 
+  async function copyToClipboard(text) {
+    if (navigator.clipboard?.writeText) {
+      try { await navigator.clipboard.writeText(text); return true; } catch {}
+    }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch { return false; }
+  }
+
   async function copyTable(headers, rows, keys) {
     const tsv = generateTsv(headers, rows, keys);
-    await navigator.clipboard.writeText(tsv);
+    await copyToClipboard(tsv);
     showToast('Table copied to clipboard', 'success');
   }
 

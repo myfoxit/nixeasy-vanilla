@@ -804,8 +804,15 @@ export function createMeasurePointCalculatorView(container, {
       copyBtn.className = 'btn btn-primary';
       copyBtn.textContent = 'Copy Total';
       copyBtn.disabled = totalPoints === 0;
-      copyBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(totalPoints.toString());
+      copyBtn.addEventListener('click', async () => {
+        const text = totalPoints.toString();
+        if (navigator.clipboard?.writeText) {
+          try { await navigator.clipboard.writeText(text); showToast('Measure points copied to clipboard', 'success'); return; } catch {}
+        }
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;opacity:0;';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
         showToast('Measure points copied to clipboard', 'success');
       });
       totalRow.appendChild(copyBtn);
