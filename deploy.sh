@@ -59,8 +59,9 @@ if docker volume inspect "${APP_DIR}_pb_data" &>/dev/null 2>&1; then
   echo "   Kept last 5 backups"
 fi
 
-# Build and deploy
+# Stop existing containers to free ports, then rebuild
 echo "🔨 Building and starting containers..."
+docker compose down --timeout 10 2>/dev/null || true
 docker compose up -d --build
 
 # Wait for health
